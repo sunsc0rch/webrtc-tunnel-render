@@ -47,6 +47,7 @@ app.get('/health', (req, res) => {
 });
 
 // HTTP прокси к ноутбуку
+// В server.js замените эту часть:
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
@@ -81,7 +82,7 @@ app.all('/proxy/*', async (req, res) => {
   
   console.log(`🔄 Forwarding request ${requestId} to laptop: ${laptopData.id}`);
 
-  // Подготавливаем запрос
+  // Подготавливаем запрос - ИСПРАВЛЕННАЯ ЧАСТЬ:
   const requestData = {
     type: 'http-request',
     id: requestId,
@@ -89,7 +90,8 @@ app.all('/proxy/*', async (req, res) => {
     path: '/' + targetPath,
     headers: { ...req.headers },
     query: req.query,
-    body: req.body
+    // Только для методов, которые могут иметь body
+    body: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? req.body : undefined
   };
 
   // Удаляем проблемные headers
