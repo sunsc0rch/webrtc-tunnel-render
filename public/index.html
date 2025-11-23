@@ -6,146 +6,78 @@
     <base href="/proxy/" target="_top">
     <title>WebRTC Tunnel - pentester.run.place</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            font-family: Arial, sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
             padding: 20px;
+            background: #f5f5f5;
         }
         .header {
             background: white;
-            border-radius: 10px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .status-card {
-            background: white;
-            border-radius: 10px;
             padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .content-area {
-            background: white;
             border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .online { background: #d4edda; color: #155724; }
+        .offline { background: #f8d7da; color: #721c24; }
+        .content {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             min-height: 400px;
         }
-        .online { border-left: 4px solid #28a745; }
-        .offline { border-left: 4px solid #dc3545; }
-        .checking { border-left: 4px solid #ffc107; }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-weight: bold;
-            margin-left: 10px;
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 50px auto;
         }
-        .online-badge { background: #d4edda; color: #155724; }
-        .offline-badge { background: #f8d7da; color: #721c24; }
-        
-        .footer {
-            text-align: center;
-            margin-top: 20px;
-            color: white;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .footer a {
-            color: white;
-            text-decoration: underline;
+        .proxy-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 0.9em;
         }
-.status-badge {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.8em;
-    font-weight: bold;
-    margin-left: 10px;
-}
-
-.online-badge { 
-    background: #d4edda; 
-    color: #155724; 
-    border: 1px solid #c3e6cb;
-}
-
-.offline-badge { 
-    background: #f8d7da; 
-    color: #721c24; 
-    border: 1px solid #f1b0b7;
-}
-
-.connection-status {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    padding: 8px 12px;
-    border-radius: 5px;
-    font-size: 0.8em;
-    z-index: 1000;
-}
-
-.connection-online {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-
-.connection-offline {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f1b0b7;
-}
-
-/* Spinner animation */
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.spinner {
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #3498db;
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto;
-}
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 WebRTC Tunnel</h1>
-            <p>Access your local application from anywhere via WebRTC</p>
-            <div id="status" class="status-checking">
-                <span>Checking tunnel status...</span>
-            </div>
+    <div class="header">
+        <h1>🚀 WebRTC Tunnel</h1>
+        <p>Access your local application from anywhere</p>
+        <div class="proxy-notice">
+            🔄 All requests are proxied through WebRTC tunnel to your laptop
         </div>
-
-        <div class="content-area" id="content">
-            <div style="text-align: center; padding: 50px 0;">
-                <div class="spinner"></div>
-                <p>Loading content from your laptop...</p>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>Powered by WebRTC • <a href="/status">Tunnel Status</a> • <a href="/health">Health Check</a></p>
+        <div id="status" class="status">
+            Checking tunnel status...
         </div>
     </div>
 
+    <div class="content" id="content">
+        <div class="spinner"></div>
+        <p style="text-align: center;">Loading content from your laptop...</p>
+    </div>
+
     <script>
+        // Простой клиент с автоматической фиксацией ссылок
         async function checkStatus() {
             try {
                 const response = await fetch('/health');
@@ -153,17 +85,17 @@
                 
                 const statusElement = document.getElementById('status');
                 if (data.laptops > 0) {
-                    statusElement.innerHTML = `<span>✅ Tunnel Online</span> <span class="status-badge online-badge">${data.laptops} laptop(s) connected</span>`;
-                    statusElement.className = 'online';
+                    statusElement.textContent = `✅ Tunnel Online - ${data.laptops} laptop connected`;
+                    statusElement.className = 'status online';
+                    loadContent();
                 } else {
-                    statusElement.innerHTML = '<span>❌ Tunnel Offline</span> <span class="status-badge offline-badge">No laptops connected</span>';
-                    statusElement.className = 'offline';
+                    statusElement.textContent = '❌ Tunnel Offline - No laptops connected';
+                    statusElement.className = 'status offline';
+                    showOfflineMessage();
                 }
-                
-                return data.laptops > 0;
             } catch (error) {
-                document.getElementById('status').innerHTML = '<span>⚠️ Status check failed</span>';
-                return false;
+                document.getElementById('status').textContent = '⚠️ Status check failed';
+                document.getElementById('status').className = 'status offline';
             }
         }
 
@@ -174,42 +106,87 @@
                 
                 const html = await response.text();
                 document.getElementById('content').innerHTML = html;
+                
+                // Дополнительная фиксация ссылок на клиенте
+                fixAllLinks();
+                
             } catch (error) {
                 document.getElementById('content').innerHTML = `
-                    <div style="text-align: center; padding: 50px 0;">
-                        <h3>❌ Connection Error</h3>
-                        <p>Unable to load content from your laptop.</p>
-                        <p><strong>Error:</strong> ${error.message}</p>
-                        <p>Make sure your laptop client is running and connected to the tunnel server.</p>
+                    <div style="text-align: center; padding: 50px;">
+                        <h3>❌ Content Loading Failed</h3>
+                        <p>Error: ${error.message}</p>
+                        <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            Retry
+                        </button>
                     </div>
                 `;
             }
         }
 
-        // Загружаем статус и контент
-        checkStatus().then(isOnline => {
-            if (isOnline) {
-                loadContent();
-            } else {
-                document.getElementById('content').innerHTML = `
-                    <div style="text-align: center; padding: 50px 0;">
-                        <h3>💻 No Laptop Connected</h3>
-                        <p>Your laptop is not currently connected to the WebRTC tunnel.</p>
-                        <p>Please start your laptop client to establish the connection.</p>
-                        <p>Once connected, this page will automatically refresh and show your application.</p>
-                    </div>
-                `;
+        function fixAllLinks() {
+            // Фиксим все возможные ссылки
+            const attributes = ['href', 'src', 'action', 'data-src', 'data-href'];
+            
+            attributes.forEach(attr => {
+                const elements = document.querySelectorAll(`[${attr}]`);
+                elements.forEach(element => {
+                    const value = element.getAttribute(attr);
+                    if (value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/proxy/')) {
+                        element.setAttribute(attr, '/proxy' + value);
+                    }
+                });
+            });
+
+            // Фиксим inline стили
+            const elementsWithStyle = document.querySelectorAll('[style]');
+            elementsWithStyle.forEach(element => {
+                const style = element.getAttribute('style');
+                if (style && style.includes('url(/')) {
+                    const fixedStyle = style.replace(/url\((\/(?!\/))([^)]*)\)/g, 'url(/proxy$2)');
+                    element.setAttribute('style', fixedStyle);
+                }
+            });
+
+            // Фиксим теги style
+            const styleTags = document.querySelectorAll('style');
+            styleTags.forEach(style => {
+                style.textContent = style.textContent.replace(
+                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
+                    'url("/proxy/$2")'
+                );
+            });
+        }
+
+        function showOfflineMessage() {
+            document.getElementById('content').innerHTML = `
+                <div style="text-align: center; padding: 50px;">
+                    <h3>💻 No Laptop Connected</h3>
+                    <p>Please start your laptop client to establish the connection.</p>
+                    <p>Once connected, this page will automatically refresh.</p>
+                    <button onclick="checkStatus()" style="padding: 10px 20px; margin: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        Check Again
+                    </button>
+                </div>
+            `;
+        }
+
+        // Перехватываем навигацию чтобы все ссылки шли через прокси
+        document.addEventListener('click', (event) => {
+            const link = event.target.closest('a');
+            if (link && link.href) {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
+                    event.preventDefault();
+                    window.location.href = '/proxy' + href;
+                }
             }
         });
 
-        // Авто-обновление каждые 10 секунд если офлайн
-        setInterval(() => {
-            checkStatus().then(isOnline => {
-                if (isOnline) {
-                    loadContent();
-                }
-            });
-        }, 10000);
+        // Запускаем проверку статуса
+        checkStatus();
+        
+        // Авто-обновление каждые 5 секунд
+        setInterval(checkStatus, 5000);
     </script>
 </body>
 </html>
