@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Tunnel - pentester.run.place</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .status-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .content-area {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-height: 400px;
+        }
+        .online { border-left: 4px solid #28a745; }
+        .offline { border-left: 4px solid #dc3545; }
+        .checking { border-left: 4px solid #ffc107; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .online-badge { background: #d4edda; color: #155724; }
+        .offline-badge { background: #f8d7da; color: #721c24; }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: white;
+        }
+        .footer a {
+            color: white;
+            text-decoration: underline;
+        }
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.online-badge { 
+    background: #d4edda; 
+    color: #155724; 
+    border: 1px solid #c3e6cb;
+}
+
+.offline-badge { 
+    background: #f8d7da; 
+    color: #721c24; 
+    border: 1px solid #f1b0b7;
+}
+
+.connection-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    z-index: 1000;
+}
+
+.connection-online {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.connection-offline {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f1b0b7;
+}
+
+/* Spinner animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 WebRTC Tunnel</h1>
+            <p>Access your local application from anywhere via WebRTC</p>
+            <div id="status" class="status-checking">
+                <span>Checking tunnel status...</span>
+            </div>
+        </div>
+
+        <div class="content-area" id="content">
+            <div style="text-align: center; padding: 50px 0;">
+                <div class="spinner"></div>
+                <p>Loading content from your laptop...</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by WebRTC • <a href="/status">Tunnel Status</a> • <a href="/health">Health Check</a></p>
+        </div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('status');
+                if (data.laptops > 0) {
+                    statusElement.innerHTML = `<span>✅ Tunnel Online</span> <span class="status-badge online-badge">${data.laptops} laptop(s) connected</span>`;
+                    statusElement.className = 'online';
+                } else {
+                    statusElement.innerHTML = '<span>❌ Tunnel Offline</span> <span class="status-badge offline-badge">No laptops connected</span>';
+                    statusElement.className = 'offline';
+                }
+                
+                return data.laptops > 0;
+            } catch (error) {
+                document.getElementById('status').innerHTML = '<span>⚠️ Status check failed</span>';
+                return false;
+            }
+        }
+
+        async function loadContent() {
+            try {
+                const response = await fetch('/proxy/');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const html = await response.text();
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('content').innerHTML = `
+                    <div style="text-align: center; padding: 50px 0;">
+                        <h3>❌ Connection Error</h3>
+                        <p>Unable to load content from your laptop.</p>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>Make sure your laptop client is running and connected to the tunnel server.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Загружаем статус и контент
+        checkStatus().then(isOnline => {
+            if (isOnline) {
+                loadContent();
+            } else {
+                document.getElementById('content').innerHTML = `
+                    <div style="text-align: center; padding: 50px 0;">
+                        <h3>💻 No Laptop Connected</h3>
+                        <p>Your laptop is not currently connected to the WebRTC tunnel.</p>
+                        <p>Please start your laptop client to establish the connection.</p>
+                        <p>Once connected, this page will automatically refresh and show your application.</p>
+                    </div>
+                `;
+            }
+        });
+
+        // Авто-обновление каждые 10 секунд если офлайн
+        setInterval(() => {
+            checkStatus().then(isOnline => {
+                if (isOnline) {
+                    loadContent();
+                }
+            });
+        }, 10000);
+    </script>
+</body>
+</html>

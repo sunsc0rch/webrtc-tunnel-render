@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tunnel Status - pentester.run.place</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status-card {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .online { background: #d4edda; border-left: 4px solid #28a745; }
+        .offline { background: #f8d7da; border-left: 4px solid #dc3545; }
+        .warning { background: #fff3cd; border-left: 4px solid #ffc107; }
+        
+        .connection-list {
+            margin-top: 20px;
+        }
+        .connection-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 5px 0;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 WebRTC Tunnel Status</h1>
+        <p>Real-time status of your WebRTC tunnel connections</p>
+        
+        <div id="status" class="status-card">
+            Loading status...
+        </div>
+        
+        <div class="connection-list" id="connections">
+            <h3>Active Connections</h3>
+            <div id="connections-list"></div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="/">← Back to Main Page</a> • 
+            <a href="/health">Raw Health Data</a>
+        </div>
+    </div>
+
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('status');
+                const connectionsList = document.getElementById('connections-list');
+                
+                if (data.laptops > 0) {
+                    statusElement.className = 'status-card online';
+                    statusElement.innerHTML = `
+                        <h2>✅ Tunnel Online</h2>
+                        <p><strong>Laptops connected:</strong> ${data.laptops}</p>
+                        <p><strong>Browsers connected:</strong> ${data.browsers}</p>
+                        <p><strong>Server:</strong> ${data.server}</p>
+                        <p><strong>Last update:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                    `;
+                    
+                    connectionsList.innerHTML = `
+                        <div class="connection-item">
+                            <strong>💻 Laptop Connection</strong><br>
+                            <small>ID: ${data.laptops > 0 ? 'Connected' : 'None'}</small>
+                        </div>
+                        <div class="connection-item">
+                            <strong>🌐 Browser Connections</strong><br>
+                            <small>Active: ${data.browsers}</small>
+                        </div>
+                    `;
+                } else {
+                    statusElement.className = 'status-card offline';
+                    statusElement.innerHTML = `
+                        <h2>❌ Tunnel Offline</h2>
+                        <p>No laptops are currently connected to the tunnel.</p>
+                        <p><strong>Browsers connected:</strong> ${data.browsers}</p>
+                        <p><strong>Server status:</strong> ${data.status}</p>
+                    `;
+                    
+                    connectionsList.innerHTML = `
+                        <div class="connection-item warning">
+                            <strong>⚠️ No Laptop Connected</strong><br>
+                            <small>Please start your laptop client to establish the tunnel</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('status').innerHTML = `
+                    <div class="status-card offline">
+                        <h2>❌ Status Check Failed</h2>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Загружаем статус и обновляем каждые 5 секунд
+        loadStatus();
+        setInterval(loadStatus, 5000);
+    </script>
+</body>
+</html>
