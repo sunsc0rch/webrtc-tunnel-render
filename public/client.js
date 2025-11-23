@@ -338,18 +338,33 @@ class TunnelStatusManager {
         }
     }
 
-    fixRelativeUrls() {
-        // Fix relative URLs in the loaded content to go through our proxy
-        const elements = this.contentElement.querySelectorAll('[href], [src]');
-        elements.forEach(element => {
-            const attr = element.hasAttribute('href') ? 'href' : 'src';
-            let url = element.getAttribute(attr);
-            
-            if (url && url.startsWith('/') && !url.startsWith('//')) {
-                element.setAttribute(attr, '/proxy' + url);
+fixRelativeUrls() {
+    // Fix relative URLs in the loaded content to go through our proxy
+    const elements = this.contentElement.querySelectorAll('[href], [src], [action]');
+    elements.forEach(element => {
+        const attrs = ['href', 'src', 'action'];
+        attrs.forEach(attr => {
+            if (element.hasAttribute(attr)) {
+                let url = element.getAttribute(attr);
+                
+                if (url && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+                    // Пропускаем уже исправленные URL
+                    if (!url.startsWith('/proxy/')) {
+                        element.setAttribute(attr, '/proxy' + url);
+                    }
+                }
             }
         });
-    }
+    });
+
+    const styleElements = this.contentElement.querySelectorAll('style');
+    styleElements.forEach(style => {
+        style.textContent = style.textContent.replace(
+            /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
+            'url("/proxy/$2")'
+        );
+    });
+}
 
     startStatusMonitoring() {
         // Initial check
