@@ -46,7 +46,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ПРОСТОЙ HTTP прокси к ноутбуку - БЕЗ ФИКСАЦИИ URL
+// HTTP прокси к ноутбуку
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
@@ -74,7 +74,6 @@ app.all('/proxy/*', async (req, res) => {
   
   console.log(`🔄 Forwarding to laptop: ${requestId}`);
 
-  // ПРОСТОЙ запрос без сложных преобразований
   const requestData = {
     type: 'http-request',
     id: requestId,
@@ -112,7 +111,7 @@ app.all('/proxy/*', async (req, res) => {
         
         console.log(`✅ Response ${requestId}: ${message.status}`);
         
-        // Просто передаем headers и body как есть
+        // Передаем headers и body как есть
         if (message.headers) {
           Object.entries(message.headers).forEach(([key, value]) => {
             res.setHeader(key, value);
@@ -190,15 +189,17 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 WebRTC Tunnel Server running on port ${PORT}`);
-});
-server.listen(PORT, () => {
-  console.log(`🚀 WebRTC Tunnel Server running on port ${PORT}`);
-  console.log(`📊 Endpoints:`);
-  console.log(`   http://localhost:${PORT}/          - Main page`);
-  console.log(`   http://localhost:${PORT}/status    - Status page`);
-  console.log(`   http://localhost:${PORT}/health    - Health check`);
-  console.log(`   http://localhost:${PORT}/proxy/*   - HTTP proxy to laptop`);
-});
+// ФИКС: Проверяем, не запущен ли уже сервер
+if (!server.listening) {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`🚀 WebRTC Tunnel Server running on port ${PORT}`);
+    console.log(`📊 Endpoints:`);
+    console.log(`   http://localhost:${PORT}/          - Main page`);
+    console.log(`   http://localhost:${PORT}/status    - Status page`);
+    console.log(`   http://localhost:${PORT}/health    - Health check`);
+    console.log(`   http://localhost:${PORT}/proxy/*   - HTTP proxy to laptop`);
+  });
+} else {
+  console.log('ℹ️  Server already listening');
+}
