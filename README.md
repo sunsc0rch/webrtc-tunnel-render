@@ -1,1 +1,1 @@
-Experimental webrtc proxy app for local wagtail blog
+Experimental webrtc proxy app for tunnel connections through external node
