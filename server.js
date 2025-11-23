@@ -181,6 +181,62 @@ app.all('/proxy/*', async (req, res) => {
     }
 });
 
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/static/*', async (req, res) => {
+    const staticPath = req.params[0];
+    
+    if (laptops.size === 0) {
+        return res.status(503).send('Tunnel offline');
+    }
+
+    const [laptopWs] = laptops.entries().next().value;
+    const requestId = generateId();
+    
+    const requestData = {
+        type: 'http-request',
+        id: requestId,
+        method: 'GET',
+        path: '/static/' + staticPath,
+        headers: {
+            ...req.headers,
+            'accept': '*/*'
+        }
+    };
+
+    delete requestData.headers.host;
+    delete requestData.headers['content-length'];
+    delete requestData.headers['accept-encoding'];
+
+    const timeout = setTimeout(() => {
+        res.status(504).send('Timeout');
+    }, 15000);
+
+    const responseHandler = (data) => {
+        try {
+            const message = JSON.parse(data);
+            if (message.type === 'http-response' && message.id === requestId) {
+                clearTimeout(timeout);
+                laptopWs.removeListener('message', responseHandler);
+                
+                if (message.headers) {
+                    Object.entries(message.headers).forEach(([key, value]) => {
+                        res.setHeader(key, value);
+                    });
+                }
+                res.status(message.status).send(message.body);
+            }
+        } catch (error) {
+            console.error('Static file error:', error);
+        }
+    };
+
+    laptopWs.on('message', responseHandler);
+    laptopWs.send(JSON.stringify(requestData));
+});
+
 // WebSocket соединения
 wss.on('connection', (ws, req) => {
   const clientId = generateId();
