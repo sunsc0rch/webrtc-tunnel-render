@@ -24,7 +24,38 @@ const browsers = new Map();
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
+// Функция для фикса URL в HTML контенте
+function fixHtmlUrls(html, basePath = '') {
+    if (!html || typeof html !== 'string') return html;
+    
+    // Заменяем относительные URL на абсолютные через наш прокси
+    return html
+        .replace(/(href|src|action)=["'](\/(?!\/))([^"']*)["']/g, `$1="/proxy/$3"`)
+        .replace(/(url\()["']?(\/(?!\/))([^"')]*)["']?\)/g, `url("/proxy/$3")`)
+        .replace(/<script[^>]*src=["'](\/(?!\/))([^"']*)["']/g, `<script src="/proxy/$2"`)
+        .replace(/<link[^>]*href=["'](\/(?!\/))([^"']*)["']/g, `<link href="/proxy/$2"`)
+        .replace(/<img[^>]*src=["'](\/(?!\/))([^"']*)["']/g, `<img src="/proxy/$2"`);
+}
 
+// Функция для определения типа контента
+function getContentType(headers) {
+    const contentType = headers['content-type'] || headers['Content-Type'];
+    if (typeof contentType === 'string') {
+        return contentType.toLowerCase();
+    }
+    return 'text/html'; // по умолчанию
+}
+
+// Функция для проверки, является ли контент HTML
+function isHtmlContent(contentType) {
+    return contentType.includes('text/html') || 
+           contentType.includes('application/xhtml+xml');
+}
+
+// Функция для проверки, является ли контент CSS
+function isCssContent(contentType) {
+    return contentType.includes('text/css');
+}
 // Главная страница
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
