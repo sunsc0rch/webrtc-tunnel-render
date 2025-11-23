@@ -57,129 +57,128 @@ function isCssContent(contentType) {
     return contentType.includes('text/css');
 }
 // Главная страница
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Страница статуса
-app.get('/status', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'status.html'));
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    laptops: laptops.size,
-    browsers: browsers.size,
-    server: 'webrtc-tunnel-render',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// HTTP прокси к ноутбуку
-// В server.js замените эту часть:
 app.all('/proxy/*', async (req, res) => {
-  const targetPath = req.params[0] || '';
-  
-  console.log(`📨 HTTP ${req.method} /proxy/${targetPath}`);
-  
-  if (laptops.size === 0) {
-    return res.status(503).send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Tunnel Offline - pentester.run.place</title>
-        <style>
-          body { font-family: Arial, sans-serif; max-width: 600px; margin: 100px auto; padding: 20px; }
-          .error { background: #f8d7da; color: #721c24; padding: 20px; border-radius: 5px; }
-        </style>
-      </head>
-      <body>
-        <div class="error">
-          <h2>🚫 WebRTC Tunnel Offline</h2>
-          <p>No laptop is currently connected to the tunnel.</p>
-          <p>Please ensure your laptop client is running and connected to the server.</p>
-          <p><a href="/status">Check tunnel status</a></p>
-        </div>
-      </body>
-      </html>
-    `);
-  }
+    const targetPath = req.params[0] || '';
+    
+    console.log(`📨 HTTP ${req.method} /proxy/${targetPath}`);
+    
+    if (laptops.size === 0) {
+        return res.status(503).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Tunnel Offline - pentester.run.place</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 600px; margin: 100px auto; padding: 20px; }
+                    .error { background: #f8d7da; color: #721c24; padding: 20px; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h2>🚫 WebRTC Tunnel Offline</h2>
+                    <p>No laptop is currently connected to the tunnel.</p>
+                    <p>Please ensure your laptop client is running and connected to the server.</p>
+                    <p><a href="/status">Check tunnel status</a></p>
+                </div>
+            </body>
+            </html>
+        `);
+    }
 
-  // Берем первое доступное соединение с ноутбуком
-  const [laptopWs, laptopData] = laptops.entries().next().value;
-  const requestId = generateId();
-  
-  console.log(`🔄 Forwarding request ${requestId} to laptop: ${laptopData.id}`);
+    // Берем первое доступное соединение с ноутбуком
+    const [laptopWs, laptopData] = laptops.entries().next().value;
+    const requestId = generateId();
+    
+    console.log(`🔄 Forwarding request ${requestId} to laptop: ${laptopData.id}`);
 
-  // Подготавливаем запрос - ИСПРАВЛЕННАЯ ЧАСТЬ:
-  const requestData = {
-    type: 'http-request',
-    id: requestId,
-    method: req.method,
-    path: '/' + targetPath,
-    headers: { ...req.headers },
-    query: req.query,
-    // Только для методов, которые могут иметь body
-    body: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? req.body : undefined
-  };
+    // Подготавливаем запрос
+    const requestData = {
+        type: 'http-request',
+        id: requestId,
+        method: req.method,
+        path: '/' + targetPath,
+        headers: { ...req.headers },
+        query: req.query,
+        body: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? req.body : undefined
+    };
 
-  // Удаляем проблемные headers
-  delete requestData.headers.host;
-  delete requestData.headers['content-length'];
-  delete requestData.headers['accept-encoding'];
+    // Удаляем проблемные headers
+    delete requestData.headers.host;
+    delete requestData.headers['content-length'];
+    delete requestData.headers['accept-encoding'];
+    delete requestData.headers['accept'];
 
-  // Таймаут 30 секунд
-  const timeout = setTimeout(() => {
-    console.log(`❌ Timeout for request ${requestId}`);
-    res.status(504).send(`
-      <html>
-        <body>
-          <h2>Request Timeout</h2>
-          <p>The request took too long to complete through the WebRTC tunnel.</p>
-        </body>
-      </html>
-    `);
-  }, 30000);
+    // Добавляем правильные headers
+    requestData.headers.accept = '*/*';
+    requestData.headers.connection = 'close';
 
-  // Обработчик ответа
-  const responseHandler = (data) => {
+    // Таймаут 30 секунд
+    const timeout = setTimeout(() => {
+        console.log(`❌ Timeout for request ${requestId}`);
+        res.status(504).send(`
+            <html>
+                <body>
+                    <h2>Request Timeout</h2>
+                    <p>The request took too long to complete through the WebRTC tunnel.</p>
+                </body>
+            </html>
+        `);
+    }, 30000);
+
+    // Обработчик ответа
+    const responseHandler = (data) => {
+        try {
+            const message = JSON.parse(data);
+            
+            if (message.type === 'http-response' && message.id === requestId) {
+                clearTimeout(timeout);
+                laptopWs.removeListener('message', responseHandler);
+                
+                console.log(`✅ Response for ${requestId}: ${message.status}`);
+                
+                // Устанавливаем headers
+                if (message.headers) {
+                    Object.entries(message.headers).forEach(([key, value]) => {
+                        if (key.toLowerCase() !== 'content-length') {
+                            res.setHeader(key, value);
+                        }
+                    });
+                }
+
+                let responseBody = message.body || '';
+
+                // Фиксим URL в контенте если это HTML или CSS
+                const contentType = getContentType(message.headers);
+                if (isHtmlContent(contentType) || isCssContent(contentType)) {
+                    console.log(`🔧 Fixing URLs in ${contentType} content`);
+                    responseBody = fixHtmlUrls(responseBody, targetPath);
+                }
+
+                // Добавляем base tag для HTML чтобы все ссылки шли через прокси
+                if (isHtmlContent(contentType) && responseBody.includes('</head>')) {
+                    responseBody = responseBody.replace(
+                        '</head>',
+                        `<base href="/proxy/" target="_top"></head>`
+                    );
+                }
+
+                res.status(message.status || 200).send(responseBody);
+            }
+        } catch (error) {
+            console.error('Error parsing response:', error);
+        }
+    };
+
+    laptopWs.on('message', responseHandler);
+    
+    // Отправляем запрос ноутбуку
     try {
-      const message = JSON.parse(data);
-      
-      if (message.type === 'http-response' && message.id === requestId) {
+        laptopWs.send(JSON.stringify(requestData));
+    } catch (error) {
         clearTimeout(timeout);
         laptopWs.removeListener('message', responseHandler);
-        
-        console.log(`✅ Response for ${requestId}: ${message.status}`);
-        
-        // Устанавливаем headers
-        if (message.headers) {
-          Object.entries(message.headers).forEach(([key, value]) => {
-            if (key.toLowerCase() !== 'content-length') {
-              res.setHeader(key, value);
-            }
-          });
-        }
-        
-        res.status(message.status || 200).send(message.body);
-      }
-    } catch (error) {
-      console.error('Error parsing response:', error);
+        res.status(502).send('WebSocket send error');
     }
-  };
-
-  laptopWs.on('message', responseHandler);
-  
-  // Отправляем запрос ноутбуку
-  try {
-    laptopWs.send(JSON.stringify(requestData));
-  } catch (error) {
-    clearTimeout(timeout);
-    laptopWs.removeListener('message', responseHandler);
-    res.status(502).send('WebSocket send error');
-  }
 });
 
 // WebSocket соединения
