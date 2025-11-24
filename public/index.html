@@ -76,8 +76,9 @@
         <p style="text-align: center;">Loading content from your laptop...</p>
     </div>
 
-    <script>
-        // ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
+<script>
+        
+// ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
         
 const originalFetch = window.fetch;
 const originalXHROpen = XMLHttpRequest.prototype.open;
@@ -109,7 +110,19 @@ function fixUrl(url) {
     }
     return url;
 }
-
+    
+// Функция для проверки статических файлов
+function isStaticAsset(url) {
+    const staticPatterns = [
+        '/static/', '/media/', '/admin/', 
+        '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+        '.woff', '.woff2', '.ttf', '.eot',
+        '.map' // source maps
+    ];
+    
+    return staticPatterns.some(pattern => url.includes(pattern));
+}
+    
 // Перехватываем fetch запросы
 window.fetch = function(...args) {
     let url = args[0];
@@ -470,6 +483,6 @@ history.replaceState = function(state, title, url) {
                 window.location.href = fixUrl(testUrl);
             }
         };
-    </script>
+</script>
 </body>
 </html>
