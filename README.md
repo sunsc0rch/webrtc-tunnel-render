@@ -29,6 +29,10 @@ copy laptop-client.js to ~/laptop-webrtc
 
 npm install
 
+LOCAL_APP_URL=http://localhost:8100 # your local app on external node that you want to tunnel
+
+Change it in laptop-client.js
+
 run it 
 
 RENDER_SERVER=wss://your-webrtc-tunnel-app.onrender.com node laptop-client.js
