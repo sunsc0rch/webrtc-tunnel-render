@@ -84,6 +84,18 @@ const originalFetch = window.fetch;
 const originalXHROpen = XMLHttpRequest.prototype.open;
 const originalXHRSend = XMLHttpRequest.prototype.send;
 
+// Функция для проверки статических файлов
+function isStaticAsset(url) {
+    const staticPatterns = [
+        '/static/', '/media/', '/admin/', 
+        '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+        '.woff', '.woff2', '.ttf', '.eot',
+        '.map' // source maps
+    ];
+    
+    return staticPatterns.some(pattern => url.includes(pattern));
+}
+    
 // Функция для проверки и фиксации URL
 function fixUrl(url) {
     if (typeof url !== 'string') return url;
@@ -92,15 +104,8 @@ function fixUrl(url) {
     // И не является статическим файлом (не содержит /static/, /media/, /admin/)
     if (url.startsWith('/') && 
         !url.startsWith('//') && 
-        !url.startsWith('/proxy/') &&
-        !url.includes('/static/') &&
-        !url.includes('/media/') &&
-        !url.includes('/admin/') &&
-        !url.includes('.css') &&
-        !url.includes('.js') &&
-        !url.includes('.png') &&
-        !url.includes('.jpg') &&
-        !url.includes('.svg')) {
+        !isStaticAsset(url)) &&
+        !url.startsWith('/proxy/') {
         
         // Сохраняем query параметры если есть
         const urlObj = new URL(url, window.location.origin);
@@ -173,8 +178,7 @@ function interceptDynamicEvents() {
     };
 }
 
-// Запускаем перехват динамических событий
-interceptDynamicEvents();    
+   
 // Функция для проверки статических файлов
 function isStaticAsset(url) {
     const staticPatterns = [
@@ -509,6 +513,7 @@ async function loadContent() {
         fixAllLinks();
         interceptDynamicEvents();
         interceptGlobalUrls();
+        interceptForms();
         
         // Перехватываем выполнение inline JavaScript
         interceptInlineScripts();
