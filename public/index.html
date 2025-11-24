@@ -79,102 +79,114 @@
     <script>
         // ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
         
-        const originalFetch = window.fetch;
-        const originalXHROpen = XMLHttpRequest.prototype.open;
-        const originalXHRSend = XMLHttpRequest.prototype.send;
+const originalFetch = window.fetch;
+const originalXHROpen = XMLHttpRequest.prototype.open;
+const originalXHRSend = XMLHttpRequest.prototype.send;
 
-        // Функция для проверки и фиксации URL
-        function fixUrl(url) {
-            if (typeof url !== 'string') return url;
-            
-            // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
-            if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                // Сохраняем query параметры если есть
-                const urlObj = new URL(url, window.location.origin);
-                const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
-                console.log('🔀 URL proxied:', url, '→', fixedUrl);
-                return fixedUrl;
-            }
-            return url;
+// Функция для проверки и фиксации URL
+function fixUrl(url) {
+    if (typeof url !== 'string') return url;
+    
+    // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
+    // И не является статическим файлом (не содержит /static/, /media/, /admin/)
+    if (url.startsWith('/') && 
+        !url.startsWith('//') && 
+        !url.startsWith('/proxy/') &&
+        !url.includes('/static/') &&
+        !url.includes('/media/') &&
+        !url.includes('/admin/') &&
+        !url.includes('.css') &&
+        !url.includes('.js') &&
+        !url.includes('.png') &&
+        !url.includes('.jpg') &&
+        !url.includes('.svg')) {
+        
+        // Сохраняем query параметры если есть
+        const urlObj = new URL(url, window.location.origin);
+        const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
+        console.log('🔀 URL proxied:', url, '→', fixedUrl);
+        return fixedUrl;
+    }
+    return url;
+}
+
+// Перехватываем fetch запросы
+window.fetch = function(...args) {
+    let url = args[0];
+    
+    // Фиксим URL если нужно
+    if (typeof url === 'string') {
+        args[0] = fixUrl(url);
+    }
+    
+    // Также фиксим URL в Request объекте
+    if (args[0] instanceof Request) {
+        const request = args[0];
+        const url = request.url;
+        const fixedUrl = fixUrl(url);
+        if (fixedUrl !== url) {
+            args[0] = new Request(fixedUrl, {
+                method: request.method,
+                headers: request.headers,
+                body: request.body,
+                referrer: request.referrer,
+                referrerPolicy: request.referrerPolicy,
+                mode: request.mode,
+                credentials: request.credentials,
+                cache: request.cache,
+                redirect: request.redirect,
+                integrity: request.integrity,
+                keepalive: request.keepalive,
+                signal: request.signal
+            });
         }
+    }
+    
+    return originalFetch.apply(this, args);
+};
 
-        // Перехватываем fetch запросы
-        window.fetch = function(...args) {
-            let url = args[0];
-            
-            // Фиксим URL если нужно
-            if (typeof url === 'string') {
-                args[0] = fixUrl(url);
-            }
-            
-            // Также фиксим URL в Request объекте
-            if (args[0] instanceof Request) {
-                const request = args[0];
-                const url = request.url;
-                if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                    const fixedUrl = fixUrl(url);
-                    args[0] = new Request(fixedUrl, {
-                        method: request.method,
-                        headers: request.headers,
-                        body: request.body,
-                        referrer: request.referrer,
-                        referrerPolicy: request.referrerPolicy,
-                        mode: request.mode,
-                        credentials: request.credentials,
-                        cache: request.cache,
-                        redirect: request.redirect,
-                        integrity: request.integrity,
-                        keepalive: request.keepalive,
-                        signal: request.signal
-                    });
-                }
-            }
-            
-            return originalFetch.apply(this, args);
-        };
-
-        // Перехватываем XMLHttpRequest
-        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-            // Фиксим URL если нужно
-            if (typeof url === 'string') {
-                url = fixUrl(url);
-            }
-            
-            return originalXHROpen.call(this, method, url, ...rest);
-        };
+// Перехватываем XMLHttpRequest
+XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+    // Фиксим URL если нужно
+    if (typeof url === 'string') {
+        url = fixUrl(url);
+    }
+    
+    return originalXHROpen.call(this, method, url, ...rest);
+};
 
         // ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
         
-        // Перехватываем все клики по ссылкам
-        document.addEventListener('click', (event) => {
-            const link = event.target.closest('a');
-            if (link && link.href) {
-                const href = link.getAttribute('href');
-                if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
-                    event.preventDefault();
-                    const fixedHref = fixUrl(href);
-                    window.location.href = fixedHref;
-                }
-            }
-        });
+// Перехватываем все клики по ссылкам
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a');
+    if (link && link.href) {
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
+            event.preventDefault();
+            const fixedHref = fixUrl(href);
+            window.location.href = fixedHref;
+        }
+    }
+});
 
-        // Перехватываем history API
-        const originalPushState = history.pushState;
-        const originalReplaceState = history.replaceState;
+// Перехватываем history API
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
 
-        history.pushState = function(state, title, url) {
-            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                url = fixUrl(url);
-            }
-            return originalPushState.call(this, state, title, url);
-        };
+history.pushState = function(state, title, url) {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+        url = fixUrl(url);
+    }
+    return originalPushState.call(this, state, title, url);
+};
 
-        history.replaceState = function(state, title, url) {
-            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                url = fixUrl(url);
-            }
-            return originalReplaceState.call(this, state, title, url);
-        };
+history.replaceState = function(state, title, url) {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+        url = fixUrl(url);
+    }
+    return originalReplaceState.call(this, state, title, url);
+};
 
         // ==================== ПЕРЕХВАТ ФОРМ ====================
         
