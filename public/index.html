@@ -76,44 +76,175 @@
         <p style="text-align: center;">Loading content from your laptop...</p>
     </div>
 
-    <script>
-    // ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
-    
-    const originalFetch = window.fetch;
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    const originalXHRSend = XMLHttpRequest.prototype.send;
 
-    // Функция для проверки статических файлов
-    function isStaticAsset(url) {
-        const staticPatterns = [
-            '/static/', '/media/', '/admin/', 
-            '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-            '.woff', '.woff2', '.ttf', '.eot',
-            '.map' // source maps
-        ];
+<script>
+// ==================== ДИАГНОСТИКА И ПЕРЕХВАТ ====================
+    
+console.log('🚀 INIT: Proxy script loading...');
+
+const originalFetch = window.fetch;
+const originalXHROpen = XMLHttpRequest.prototype.open;
+const originalXHRSend = XMLHttpRequest.prototype.send;
+
+// Функция для проверки статических файлов
+function isStaticAsset(url) {
+    const staticPatterns = [
+        '/static/', '/media/', '/admin/', 
+        '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+        '.woff', '.woff2', '.ttf', '.eot', '.map'
+    ];
+    return staticPatterns.some(pattern => url.includes(pattern));
+}
+    
+// Функция для проверки и фиксации URL
+function fixUrl(url) {
+    if (typeof url !== 'string') return url;
+    
+    if (url.startsWith('/') && 
+        !url.startsWith('//') && 
+        !url.startsWith('/proxy/') &&
+        !isStaticAsset(url)) {
         
-        return staticPatterns.some(pattern => url.includes(pattern));
+        const urlObj = new URL(url, window.location.origin);
+        const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
+        console.log('🔀 URL proxied:', url, '→', fixedUrl);
+        return fixedUrl;
     }
-        
-    // Функция для проверки и фиксации URL
-    function fixUrl(url) {
-        if (typeof url !== 'string') return url;
-        
-        // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
-        // И не является статическим файлом
-        if (url.startsWith('/') && 
-            !url.startsWith('//') && 
-            !url.startsWith('/proxy/') &&
-            !isStaticAsset(url)) {
-            
-            // Сохраняем query параметры если есть
-            const urlObj = new URL(url, window.location.origin);
-            const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
-            console.log('🔀 URL proxied:', url, '→', fixedUrl);
-            return fixedUrl;
+    return url;
+}
+
+// ==================== АГРЕССИВНЫЙ ПЕРЕХВАТ ====================
+
+// 1. Перехватываем fetch СРАЗУ
+window.fetch = function(...args) {
+    console.log('🎯 FETCH intercepted:', args[0]);
+    let url = args[0];
+    
+    if (typeof url === 'string') {
+        args[0] = fixUrl(url);
+    }
+    
+    if (args[0] instanceof Request) {
+        const request = args[0];
+        const url = request.url;
+        const fixedUrl = fixUrl(url);
+        if (fixedUrl !== url) {
+            args[0] = new Request(fixedUrl, {
+                method: request.method,
+                headers: request.headers,
+                body: request.body
+            });
         }
-        return url;
     }
+    
+    return originalFetch.apply(this, args);
+};
+
+// 2. Перехватываем XMLHttpRequest СРАЗУ
+XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+    console.log('🎯 XHR intercepted:', url);
+    if (typeof url === 'string') {
+        url = fixUrl(url);
+    }
+    return originalXHROpen.call(this, method, url, ...rest);
+};
+
+// 3. Перехватываем создание элементов СРАЗУ
+const originalCreateElement = document.createElement;
+document.createElement = function(tagName) {
+    const element = originalCreateElement.call(this, tagName);
+    
+    if (tagName.toLowerCase() === 'script') {
+        const originalSetAttribute = element.setAttribute;
+        element.setAttribute = function(name, value) {
+            if (name === 'src' && typeof value === 'string') {
+                value = fixUrl(value);
+            }
+            return originalSetAttribute.call(this, name, value);
+        };
+    }
+    
+    return element;
+};
+
+// 4. Перехватываем onclick и другие атрибуты СРАЗУ
+const originalSetAttribute = Element.prototype.setAttribute;
+Element.prototype.setAttribute = function(name, value) {
+    if ((name === 'action' || name === 'href' || name === 'src' || name === 'onclick') && 
+        typeof value === 'string' && 
+        value.startsWith('/') && 
+        !value.startsWith('//') && 
+        !value.startsWith('/proxy/') &&
+        !isStaticAsset(value)) {
+        
+        console.log('🎯 Attribute intercepted:', name, value);
+        value = fixUrl(value);
+    }
+    return originalSetAttribute.call(this, name, value);
+};
+
+// ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
+
+function interceptInlineScripts() {
+    console.log('🔍 Scanning for inline scripts...');
+    const scripts = document.querySelectorAll('script:not([src])');
+    console.log('Found inline scripts:', scripts.length);
+    
+    scripts.forEach((script, index) => {
+        if (script.textContent) {
+            console.log(`📝 Processing inline script ${index + 1}`);
+            
+            let scriptContent = script.textContent;
+            let modified = false;
+            
+            // Заменяем все URL в JavaScript
+            const replacements = [
+                // fetch запросы
+                [/(fetch\s*\(\s*['"])(\/[^'"]+)(['"])/g, '$1/proxy$2$3'],
+                // XMLHttpRequest
+                [/(\.open\s*\(\s*[^,]+,\s*['"])(\/[^'"]+)(['"])/g, '$1/proxy$2$3'],
+                // window.location
+                [/(window\.location\s*=\s*['"])(\/[^'"]+)(['"])/g, '$1/proxy$2$3'],
+                // location.href
+                [/(location\.href\s*=\s*['"])(\/[^'"]+)(['"])/g, '$1/proxy$2$3'],
+                // URL в строках
+                [/(['"])(\/catalog\/[^'"]+)(['"])/g, '$1/proxy$2$3'],
+                [/(['"])(\/search\/[^'"]+)(['"])/g, '$1/proxy$2$3']
+            ];
+            
+            replacements.forEach(([pattern, replacement]) => {
+                const newContent = scriptContent.replace(pattern, replacement);
+                if (newContent !== scriptContent) {
+                    scriptContent = newContent;
+                    modified = true;
+                    console.log('✅ Modified script content');
+                }
+            });
+            
+            if (modified) {
+                script.textContent = scriptContent;
+                console.log('✅ Inline script modified');
+            }
+        }
+    });
+}
+
+// ==================== ПЕРЕЗАПИСЬ ФУНКЦИЙ ====================
+
+function overrideExistingFunctions() {
+    console.log('🔄 Overriding existing functions...');
+    
+    // Перезаписываем возможные глобальные функции
+    if (window.performSearch) {
+        const originalPerformSearch = window.performSearch;
+        window.performSearch = function() {
+            console.log('🎯 performSearch intercepted');
+            return originalPerformSearch.apply(this, arguments);
+        };
+    }
+}
+
+
 
     // ==================== ПЕРЕХВАТ ГЛОБАЛЬНЫХ URL ====================
 
@@ -180,84 +311,7 @@
         };
     }
 
-    // ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
 
-    // Функция для перехвата inline скриптов
-    function interceptInlineScripts() {
-        const scripts = document.querySelectorAll('script');
-        scripts.forEach(script => {
-            if (!script.src && script.textContent) {
-                // Заменяем URL в inline скриптах
-                let scriptContent = script.textContent;
-                
-                // Заменяем пути в JavaScript коде - БОЛЕЕ АГРЕССИВНО
-                scriptContent = scriptContent.replace(
-                    /(['"])(\/[a-zA-Z0-9_\-]+\/[^'"]*?\?[^'"]*?)(['"])/g, 
-                    '$1/proxy$2$3'
-                );
-                
-                scriptContent = scriptContent.replace(
-                    /fetch\((['"])(\/[a-zA-Z0-9_\-]+\/[^'"]*?)(['"])/g, 
-                    'fetch($1/proxy$2$3'
-                );
-                
-                // Заменяем window.location и location.href
-                scriptContent = scriptContent.replace(
-                    /(window\.location|location\.href)\s*=\s*(['"])(\/[^'"]+)(['"])/g,
-                    '$1 = $2/proxy$3$4'
-                );
-                
-                script.textContent = scriptContent;
-            }
-        });
-    }
-
-    // ==================== ОСНОВНЫЕ ПЕРЕХВАТЧИКИ ====================
-
-    // Перехватываем fetch запросы
-    window.fetch = function(...args) {
-        let url = args[0];
-        
-        // Фиксим URL если нужно
-        if (typeof url === 'string') {
-            args[0] = fixUrl(url);
-        }
-        
-        // Также фиксим URL в Request объекте
-        if (args[0] instanceof Request) {
-            const request = args[0];
-            const url = request.url;
-            const fixedUrl = fixUrl(url);
-            if (fixedUrl !== url) {
-                args[0] = new Request(fixedUrl, {
-                    method: request.method,
-                    headers: request.headers,
-                    body: request.body,
-                    referrer: request.referrer,
-                    referrerPolicy: request.referrerPolicy,
-                    mode: request.mode,
-                    credentials: request.credentials,
-                    cache: request.cache,
-                    redirect: request.redirect,
-                    integrity: request.integrity,
-                    keepalive: request.keepalive,
-                    signal: request.signal
-                });
-            }
-        }
-        
-        return originalFetch.apply(this, args);
-    };
-
-    // Перехватываем XMLHttpRequest
-    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-        // Фиксим URL если нужно
-        if (typeof url === 'string') {
-            url = fixUrl(url);
-        }
-        
-        return originalXHROpen.call(this, method, url, ...rest);
-    };
 
     // ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
             
@@ -473,122 +527,119 @@
         });
     }
 
-    // ==================== ОСНОВНАЯ ЛОГИКА ====================
+   // ==================== ОСНОВНАЯ ЛОГИКА ====================
 
-    // Функция для инициализации всей страницы
-    function initializePage() {
+async function loadContent() {
+    try {
+        console.log('📥 Loading content from proxy...');
+        const response = await fetch('/proxy/');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const html = await response.text();
+        console.log('✅ Content loaded, length:', html.length);
+        
+        document.getElementById('content').innerHTML = html;
+        
+        // СРАЗУ перехватываем всё
+        console.log('🚀 Initializing interceptors...');
+        interceptInlineScripts();
+        overrideExistingFunctions();
         startDOMObserver();
         fixAllLinks();
-        interceptDynamicEvents();
-        interceptGlobalUrls();
-        interceptForms();
-        interceptInlineScripts();
-    }
-            
-    async function checkStatus() {
-        try {
-            const response = await fetch('/health');
-            const data = await response.json();
-            
-            const statusElement = document.getElementById('status');
-            if (data.laptops > 0) {
-                statusElement.textContent = `✅ Tunnel Online - ${data.laptops} laptop connected`;
-                statusElement.className = 'status online';
-                loadContent();
-            } else {
-                statusElement.textContent = '❌ Tunnel Offline - No laptops connected';
-                statusElement.className = 'status offline';
-                showOfflineMessage();
-            }
-        } catch (error) {
-            document.getElementById('status').textContent = '⚠️ Status check failed';
-            document.getElementById('status').className = 'status offline';
-        }
-    }
-
-    async function loadContent() {
-        try {
-            const response = await fetch('/proxy/');
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            
-            const html = await response.text();
-            document.getElementById('content').innerHTML = html;
-            
-            // Инициализируем всю страницу
-            initializePage();
-            
-        } catch (error) {
-            document.getElementById('content').innerHTML = `
-                <div style="text-align: center; padding: 50px;">
-                    <h3>❌ Content Loading Failed</h3>
-                    <p>Error: ${error.message}</p>
-                    <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                        Retry
-                    </button>
-                </div>
-            `;
-        }
-    }
-
-    function showOfflineMessage() {
+        
+        // Принудительно перехватываем события
+        setTimeout(() => {
+            rebindEventListeners();
+        }, 100);
+        
+    } catch (error) {
+        console.error('❌ Content loading failed:', error);
         document.getElementById('content').innerHTML = `
             <div style="text-align: center; padding: 50px;">
-                <h3>💻 No Laptop Connected</h3>
-                <p>Please start your laptop client to establish the connection.</p>
-                <p>Once connected, this page will automatically refresh.</p>
-                <button onclick="checkStatus()" style="padding: 10px 20px; margin: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                    Check Again
+                <h3>❌ Content Loading Failed</h3>
+                <p>Error: ${error.message}</p>
+                <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Retry
                 </button>
             </div>
         `;
     }
+}
 
-    // Запускаем проверку статуса
-    checkStatus();
+function rebindEventListeners() {
+    console.log('🔧 Rebinding event listeners...');
     
-    // Авто-обновление каждые 5 секунд если офлайн
-    setInterval(() => {
-        const statusElement = document.getElementById('status');
-        if (statusElement && statusElement.className.includes('offline')) {
-            checkStatus();
-        }
-    }, 5000);
+    // Перехватываем search input
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        console.log('🎯 Found search input, rebinding events...');
+        
+        // Удаляем старые обработчики
+        searchInput.replaceWith(searchInput.cloneNode(true));
+        
+        // Добавляем новые
+        const newSearchInput = document.getElementById('search-input');
+        let searchTimeout;
+        
+        newSearchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                console.log('🔍 Search triggered via proxy');
+                performSearchViaProxy();
+            }, 300);
+        });
+        
+        newSearchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                clearTimeout(searchTimeout);
+                performSearchViaProxy();
+            }
+        });
+    }
+}
 
-    // Глобальные функции для отладки
-    window.debugProxy = {
-        disable: function() {
-            window.fetch = originalFetch;
-            XMLHttpRequest.prototype.open = originalXHROpen;
-            XMLHttpRequest.prototype.send = originalXHRSend;
-            history.pushState = originalPushState;
-            history.replaceState = originalReplaceState;
-            console.log('🔓 Proxy disabled');
-        },
-        enable: function() {
-            window.fetch = function(...args) {
-                let url = args[0];
-                if (typeof url === 'string') {
-                    args[0] = fixUrl(url);
-                }
-                return originalFetch.apply(this, args);
-            };
-            console.log('🔒 Proxy enabled');
-        },
-        testCatalog: function() {
-            const testUrl = `/catalog/`;
-            console.log('Testing catalog URL:', testUrl);
-            window.location.href = fixUrl(testUrl);
-        },
-        testCatalogSearch: function(query) {
-            const testUrl = `/catalog/?q=${encodeURIComponent(query)}`;
-            console.log('Testing catalog search:', testUrl);
-            window.location.href = fixUrl(testUrl);
-        },
-        testUrl: function(url) {
-            console.log('Testing URL:', url, '→', fixUrl(url));
-            return fixUrl(url);
+function performSearchViaProxy() {
+    const searchInput = document.getElementById('search-input');
+    const query = searchInput.value.trim();
+    const toolsContainer = document.getElementById('tools-container');
+    
+    console.log('🔍 Performing search via proxy:', query);
+    
+    // Используем ПРОКСИРОВАННЫЙ URL
+    const searchUrl = fixUrl(`/catalog/?q=${encodeURIComponent(query)}`);
+    
+    fetch(searchUrl, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
         }
-    };
-    </script>
+    })
+    .then(response => response.text())
+    .then(html => {
+        console.log('✅ Search response received');
+        toolsContainer.innerHTML = html;
+        // Реинициализируем перехватчики в новом контенте
+        interceptInlineScripts();
+        fixAllLinks();
+    })
+    .catch(error => {
+        console.error('❌ Search error:', error);
+    });
+}
+
+// ==================== ЗАПУСК ====================
+
+console.log('🎯 Proxy system initialized');
+checkStatus();
+
+// Экспортируем для отладки
+window.proxyDebug = {
+    fixUrl,
+    interceptInlineScripts,
+    testUrl: (url) => {
+        console.log('Test:', url, '→', fixUrl(url));
+        return fixUrl(url);
+    }
+};
+</script>
 </body>
 </html>
