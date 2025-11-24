@@ -76,498 +76,519 @@
         <p style="text-align: center;">Loading content from your laptop...</p>
     </div>
 
-<script>
-        
-// ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
-        
-const originalFetch = window.fetch;
-const originalXHROpen = XMLHttpRequest.prototype.open;
-const originalXHRSend = XMLHttpRequest.prototype.send;
+    <script>
+    // ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
+    
+    const originalFetch = window.fetch;
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    const originalXHRSend = XMLHttpRequest.prototype.send;
 
-// Функция для проверки статических файлов
-function isStaticAsset(url) {
-    const staticPatterns = [
-        '/static/', '/media/', '/admin/', 
-        '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-        '.woff', '.woff2', '.ttf', '.eot',
-        '.map' // source maps
-    ];
-    
-    return staticPatterns.some(pattern => url.includes(pattern));
-}
-    
-// Функция для проверки и фиксации URL
-function fixUrl(url) {
-    if (typeof url !== 'string') return url;
-    
-    // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
-    // И не является статическим файлом (не содержит /static/, /media/, /admin/)
-    if (url.startsWith('/') && 
-        !url.startsWith('//') && 
-        !isStaticAsset(url)) &&
-        !url.startsWith('/proxy/')) {
+    // Функция для проверки статических файлов
+    function isStaticAsset(url) {
+        const staticPatterns = [
+            '/static/', '/media/', '/admin/', 
+            '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+            '.woff', '.woff2', '.ttf', '.eot',
+            '.map' // source maps
+        ];
         
-        // Сохраняем query параметры если есть
-        const urlObj = new URL(url, window.location.origin);
-        const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
-        console.log('🔀 URL proxied:', url, '→', fixedUrl);
-        return fixedUrl;
+        return staticPatterns.some(pattern => url.includes(pattern));
     }
-    return url;
-}
-// ==================== ПЕРЕХВАТ ГЛОБАЛЬНЫХ URL ====================
+        
+    // Функция для проверки и фиксации URL
+    function fixUrl(url) {
+        if (typeof url !== 'string') return url;
+        
+        // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
+        // И не является статическим файлом
+        if (url.startsWith('/') && 
+            !url.startsWith('//') && 
+            !url.startsWith('/proxy/') &&
+            !isStaticAsset(url)) {
+            
+            // Сохраняем query параметры если есть
+            const urlObj = new URL(url, window.location.origin);
+            const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
+            console.log('🔀 URL proxied:', url, '→', fixedUrl);
+            return fixedUrl;
+        }
+        return url;
+    }
 
-// Перехватываем глобальные переменные которые могут содержать URL
-function interceptGlobalUrls() {
-    // Если есть глобальные переменные с URL (например, в Django templates)
-    if (window.django && window.django.urls) {
-        const originalReverse = window.django.urls.reverse;
-        if (originalReverse) {
-            window.django.urls.reverse = function(name, args, kwargs) {
-                const url = originalReverse.call(this, name, args, kwargs);
-                return fixUrl(url);
-            };
+    // ==================== ПЕРЕХВАТ ГЛОБАЛЬНЫХ URL ====================
+
+    // Перехватываем глобальные переменные которые могут содержать URL
+    function interceptGlobalUrls() {
+        // Если есть глобальные переменные с URL (например, в Django templates)
+        if (window.django && window.django.urls) {
+            const originalReverse = window.django.urls.reverse;
+            if (originalReverse) {
+                window.django.urls.reverse = function(name, args, kwargs) {
+                    const url = originalReverse.call(this, name, args, kwargs);
+                    return fixUrl(url);
+                };
+            }
         }
-    }
-    
-    // Перехватываем возможные глобальные URL переменные
-    const urlProperties = ['catalogUrl', 'searchUrl', 'apiUrl', 'baseUrl'];
-    urlProperties.forEach(prop => {
-        if (window[prop] && typeof window[prop] === 'string') {
-            window[prop] = fixUrl(window[prop]);
-        }
-    });
-}
-    
-// Перехватываем все события которые могут создавать запросы
-function interceptDynamicEvents() {
-    // Перехватываем создание новых элементов с обработчиками
-    const originalCreateElement = document.createElement;
-    document.createElement = function(tagName) {
-        const element = originalCreateElement.call(this, tagName);
         
-        if (tagName.toLowerCase() === 'form') {
-            setTimeout(() => {
-                if (element.hasAttribute('action')) {
-                    const action = element.getAttribute('action');
-                    const fixedAction = fixUrl(action);
-                    if (fixedAction !== action) {
-                        element.setAttribute('action', fixedAction);
+        // Перехватываем возможные глобальные URL переменные
+        const urlProperties = ['catalogUrl', 'searchUrl', 'apiUrl', 'baseUrl'];
+        urlProperties.forEach(prop => {
+            if (window[prop] && typeof window[prop] === 'string') {
+                window[prop] = fixUrl(window[prop]);
+            }
+        });
+    }
+
+    // ==================== ПЕРЕХВАТ ДИНАМИЧЕСКИХ СОБЫТИЙ ====================
+        
+    // Перехватываем все события которые могут создавать запросы
+    function interceptDynamicEvents() {
+        // Перехватываем создание новых элементов с обработчиками
+        const originalCreateElement = document.createElement;
+        document.createElement = function(tagName) {
+            const element = originalCreateElement.call(this, tagName);
+            
+            if (tagName.toLowerCase() === 'form') {
+                setTimeout(() => {
+                    if (element.hasAttribute('action')) {
+                        const action = element.getAttribute('action');
+                        const fixedAction = fixUrl(action);
+                        if (fixedAction !== action) {
+                            element.setAttribute('action', fixedAction);
+                        }
                     }
-                }
-            }, 0);
-        }
-        
-        return element;
-    };
-    
-    // Перехватываем установку атрибутов
-    const originalSetAttribute = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function(name, value) {
-        if ((name === 'action' || name === 'href' || name === 'src') && 
-            typeof value === 'string' && 
-            value.startsWith('/') && 
-            !value.startsWith('//') && 
-            !value.startsWith('/proxy/') &&
-            !isStaticAsset(value)) {
-            
-            const fixedValue = fixUrl(value);
-            return originalSetAttribute.call(this, name, fixedValue);
-        }
-        return originalSetAttribute.call(this, name, value);
-    };
-}
-// ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
-
-// Функция для перехвата inline скриптов
-function interceptInlineScripts() {
-    const scripts = document.querySelectorAll('script');
-    scripts.forEach(script => {
-        if (!script.src && script.textContent) {
-            // Заменяем URL в inline скриптах
-            let scriptContent = script.textContent;
-            
-            // Заменяем пути в JavaScript коде
-            scriptContent = scriptContent.replace(
-                /(['"])(\/catalog\/[^'"]*?\?[^'"]*?)(['"])/g, 
-                '$1/proxy$2$3'
-            );
-            
-            scriptContent = scriptContent.replace(
-                /fetch\((['"])(\/catalog\/[^'"]*?)(['"])/g, 
-                'fetch($1/proxy$2$3'
-            );
-            
-            script.textContent = scriptContent;
-        }
-    });
-}
-    
-// Перехватываем fetch запросы
-window.fetch = function(...args) {
-    let url = args[0];
-    
-    // Фиксим URL если нужно
-    if (typeof url === 'string') {
-        args[0] = fixUrl(url);
-    }
-    
-    // Также фиксим URL в Request объекте
-    if (args[0] instanceof Request) {
-        const request = args[0];
-        const url = request.url;
-        const fixedUrl = fixUrl(url);
-        if (fixedUrl !== url) {
-            args[0] = new Request(fixedUrl, {
-                method: request.method,
-                headers: request.headers,
-                body: request.body,
-                referrer: request.referrer,
-                referrerPolicy: request.referrerPolicy,
-                mode: request.mode,
-                credentials: request.credentials,
-                cache: request.cache,
-                redirect: request.redirect,
-                integrity: request.integrity,
-                keepalive: request.keepalive,
-                signal: request.signal
-            });
-        }
-    }
-    
-    return originalFetch.apply(this, args);
-};
-
-// Перехватываем XMLHttpRequest
-XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-    // Фиксим URL если нужно
-    if (typeof url === 'string') {
-        url = fixUrl(url);
-    }
-    
-    return originalXHROpen.call(this, method, url, ...rest);
-};
-
-// ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
-        
-// Перехватываем все клики по ссылкам
-document.addEventListener('click', (event) => {
-    const link = event.target.closest('a');
-    if (link && link.href) {
-        const href = link.getAttribute('href');
-        if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
-            event.preventDefault();
-            const fixedHref = fixUrl(href);
-            window.location.href = fixedHref;
-        }
-    }
-});
-
-// Перехватываем history API
-const originalPushState = history.pushState;
-const originalReplaceState = history.replaceState;
-
-history.pushState = function(state, title, url) {
-    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-        url = fixUrl(url);
-    }
-    return originalPushState.call(this, state, title, url);
-};
-
-history.replaceState = function(state, title, url) {
-    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-        url = fixUrl(url);
-    }
-    return originalReplaceState.call(this, state, title, url);
-};
-
-        // ==================== ПЕРЕХВАТ ФОРМ ====================
-        
-        function interceptForms() {
-            document.addEventListener('submit', function(event) {
-                const form = event.target;
-                const action = form.getAttribute('action');
-                
-                if (action && action.startsWith('/') && !action.startsWith('//') && !action.startsWith('/proxy/')) {
-                    event.preventDefault();
-                    
-                    const formData = new FormData(form);
-                    const method = (form.getAttribute('method') || 'GET').toUpperCase();
-                    
-                    if (method === 'GET') {
-                        // Для GET - создаем URL с параметрами
-                        const params = new URLSearchParams(formData);
-                        const searchString = params.toString() ? '?' + params.toString() : '';
-                        const fixedUrl = fixUrl(action + searchString);
-                        window.location.href = fixedUrl;
-                    } else {
-                        // Для POST - отправляем через fetch
-                        const fixedUrl = fixUrl(action);
-                        fetch(fixedUrl, {
-                            method: method,
-                            body: formData,
-                            headers: {
-                                'Accept': 'text/html,application/xhtml+xml,application/xml'
-                            }
-                        }).then(response => {
-                            if (response.redirected) {
-                                // Если редирект, переходим по новому URL
-                                window.location.href = response.url;
-                            } else if (response.status === 200) {
-                                // Если успешный ответ, показываем контент
-                                return response.text().then(html => {
-                                    document.getElementById('content').innerHTML = html;
-                                    fixAllLinks();
-                                    interceptForms();
-                                    startDOMObserver();
-                                });
-                            } else {
-                                // Ошибка
-                                return response.text().then(html => {
-                                    document.getElementById('content').innerHTML = `
-                                        <div style="padding: 20px; background: #f8d7da; border-radius: 5px;">
-                                            <h3>Error ${response.status}</h3>
-                                            <pre>${html}</pre>
-                                        </div>
-                                    `;
-                                });
-                            }
-                        }).catch(error => {
-                            console.error('Form submission error:', error);
-                            alert('Form submission failed: ' + error.message);
-                        });
-                    }
-                }
-            });
-        }
-
-        // ==================== DOM OBSERVER ====================
-        
-        let observer;
-
-        function startDOMObserver() {
-            if (observer) {
-                observer.disconnect();
+                }, 0);
             }
             
-            observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === 1) {
-                            fixElementUrls(node);
-                        }
-                    });
-                });
-            });
+            return element;
+        };
+        
+        // Перехватываем установку атрибутов
+        const originalSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function(name, value) {
+            if ((name === 'action' || name === 'href' || name === 'src') && 
+                typeof value === 'string' && 
+                value.startsWith('/') && 
+                !value.startsWith('//') && 
+                !value.startsWith('/proxy/') &&
+                !isStaticAsset(value)) {
+                
+                const fixedValue = fixUrl(value);
+                return originalSetAttribute.call(this, name, fixedValue);
+            }
+            return originalSetAttribute.call(this, name, value);
+        };
+    }
 
-            observer.observe(document.getElementById('content'), {
-                childList: true,
-                subtree: true
-            });
+    // ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
+
+    // Функция для перехвата inline скриптов
+    function interceptInlineScripts() {
+        const scripts = document.querySelectorAll('script');
+        scripts.forEach(script => {
+            if (!script.src && script.textContent) {
+                // Заменяем URL в inline скриптах
+                let scriptContent = script.textContent;
+                
+                // Заменяем пути в JavaScript коде - БОЛЕЕ АГРЕССИВНО
+                scriptContent = scriptContent.replace(
+                    /(['"])(\/[a-zA-Z0-9_\-]+\/[^'"]*?\?[^'"]*?)(['"])/g, 
+                    '$1/proxy$2$3'
+                );
+                
+                scriptContent = scriptContent.replace(
+                    /fetch\((['"])(\/[a-zA-Z0-9_\-]+\/[^'"]*?)(['"])/g, 
+                    'fetch($1/proxy$2$3'
+                );
+                
+                // Заменяем window.location и location.href
+                scriptContent = scriptContent.replace(
+                    /(window\.location|location\.href)\s*=\s*(['"])(\/[^'"]+)(['"])/g,
+                    '$1 = $2/proxy$3$4'
+                );
+                
+                script.textContent = scriptContent;
+            }
+        });
+    }
+
+    // ==================== ОСНОВНЫЕ ПЕРЕХВАТЧИКИ ====================
+
+    // Перехватываем fetch запросы
+    window.fetch = function(...args) {
+        let url = args[0];
+        
+        // Фиксим URL если нужно
+        if (typeof url === 'string') {
+            args[0] = fixUrl(url);
         }
-
-        function fixElementUrls(element) {
-            if (!element.querySelector) return;
-            
-            const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
-            const selectors = attributes.map(attr => `[${attr}]`).join(',');
-            
-            const elementsWithUrls = element.querySelectorAll ? 
-                element.querySelectorAll(selectors) : [];
-            
-            // Фиксим атрибуты самого элемента
-            if (element.hasAttributes && element.hasAttributes()) {
-                Array.from(element.attributes).forEach(attr => {
-                    if (attributes.includes(attr.name)) {
-                        const fixedValue = fixUrl(attr.value);
-                        if (fixedValue !== attr.value) {
-                            element.setAttribute(attr.name, fixedValue);
-                        }
-                    }
+        
+        // Также фиксим URL в Request объекте
+        if (args[0] instanceof Request) {
+            const request = args[0];
+            const url = request.url;
+            const fixedUrl = fixUrl(url);
+            if (fixedUrl !== url) {
+                args[0] = new Request(fixedUrl, {
+                    method: request.method,
+                    headers: request.headers,
+                    body: request.body,
+                    referrer: request.referrer,
+                    referrerPolicy: request.referrerPolicy,
+                    mode: request.mode,
+                    credentials: request.credentials,
+                    cache: request.cache,
+                    redirect: request.redirect,
+                    integrity: request.integrity,
+                    keepalive: request.keepalive,
+                    signal: request.signal
                 });
             }
-            
-            // Фиксим атрибуты потомков
-            elementsWithUrls.forEach(el => {
-                attributes.forEach(attr => {
-                    if (el.hasAttribute(attr)) {
-                        const value = el.getAttribute(attr);
-                        const fixedValue = fixUrl(value);
-                        if (fixedValue !== value) {
-                            el.setAttribute(attr, fixedValue);
-                        }
-                    }
-                });
-            });
-
-            // Фиксим inline стили
-            const elementsWithStyle = element.querySelectorAll ? 
-                element.querySelectorAll('[style]') : [];
-            elementsWithStyle.forEach(el => {
-                const style = el.getAttribute('style');
-                if (style && style.includes('url(/')) {
-                    const fixedStyle = style.replace(
-                        /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
-                        'url("/proxy/$2")'
-                    );
-                    el.setAttribute('style', fixedStyle);
-                }
-            });
-
-            // Фиксим теги style
-            const styleTags = element.querySelectorAll ? 
-                element.querySelectorAll('style') : [];
-            styleTags.forEach(style => {
-                style.textContent = style.textContent.replace(
-                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
-                    'url("/proxy/$2")'
-                );
-            });
         }
-
-        function fixAllLinks() {
-            const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
-            
-            attributes.forEach(attr => {
-                const elements = document.querySelectorAll(`[${attr}]`);
-                elements.forEach(element => {
-                    const value = element.getAttribute(attr);
-                    if (value) {
-                        const fixedValue = fixUrl(value);
-                        if (fixedValue !== value) {
-                            element.setAttribute(attr, fixedValue);
-                        }
-                    }
-                });
-            });
-
-            // Фиксим inline стили
-            const elementsWithStyle = document.querySelectorAll('[style]');
-            elementsWithStyle.forEach(element => {
-                const style = element.getAttribute('style');
-                if (style && style.includes('url(/')) {
-                    const fixedStyle = style.replace(
-                        /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
-                        'url("/proxy/$2")'
-                    );
-                    element.setAttribute('style', fixedStyle);
-                }
-            });
-
-            // Фиксим теги style
-            const styleTags = document.querySelectorAll('style');
-            styleTags.forEach(style => {
-                style.textContent = style.textContent.replace(
-                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
-                    'url("/proxy/$2")'
-                );
-            });
-        }
-
-        // ==================== ОСНОВНАЯ ЛОГИКА ====================
         
-        async function checkStatus() {
-            try {
-                const response = await fetch('/health');
-                const data = await response.json();
+        return originalFetch.apply(this, args);
+    };
+
+    // Перехватываем XMLHttpRequest
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        // Фиксим URL если нужно
+        if (typeof url === 'string') {
+            url = fixUrl(url);
+        }
+        
+        return originalXHROpen.call(this, method, url, ...rest);
+    };
+
+    // ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
+            
+    // Перехватываем все клики по ссылкам
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('a');
+        if (link && link.href) {
+            const href = link.getAttribute('href');
+            if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
+                event.preventDefault();
+                const fixedHref = fixUrl(href);
+                window.location.href = fixedHref;
+            }
+        }
+    });
+
+    // Перехватываем history API
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    history.pushState = function(state, title, url) {
+        if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+            url = fixUrl(url);
+        }
+        return originalPushState.call(this, state, title, url);
+    };
+
+    history.replaceState = function(state, title, url) {
+        if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+            url = fixUrl(url);
+        }
+        return originalReplaceState.call(this, state, title, url);
+    };
+
+    // ==================== ПЕРЕХВАТ ФОРМ ====================
+            
+    function interceptForms() {
+        document.addEventListener('submit', function(event) {
+            const form = event.target;
+            const action = form.getAttribute('action');
+            
+            if (action && action.startsWith('/') && !action.startsWith('//') && !action.startsWith('/proxy/')) {
+                event.preventDefault();
                 
-                const statusElement = document.getElementById('status');
-                if (data.laptops > 0) {
-                    statusElement.textContent = `✅ Tunnel Online - ${data.laptops} laptop connected`;
-                    statusElement.className = 'status online';
-                    loadContent();
+                const formData = new FormData(form);
+                const method = (form.getAttribute('method') || 'GET').toUpperCase();
+                
+                if (method === 'GET') {
+                    // Для GET - создаем URL с параметрами
+                    const params = new URLSearchParams(formData);
+                    const searchString = params.toString() ? '?' + params.toString() : '';
+                    const fixedUrl = fixUrl(action + searchString);
+                    window.location.href = fixedUrl;
                 } else {
-                    statusElement.textContent = '❌ Tunnel Offline - No laptops connected';
-                    statusElement.className = 'status offline';
-                    showOfflineMessage();
+                    // Для POST - отправляем через fetch
+                    const fixedUrl = fixUrl(action);
+                    fetch(fixedUrl, {
+                        method: method,
+                        body: formData,
+                        headers: {
+                            'Accept': 'text/html,application/xhtml+xml,application/xml'
+                        }
+                    }).then(response => {
+                        if (response.redirected) {
+                            // Если редирект, переходим по новому URL
+                            window.location.href = response.url;
+                        } else if (response.status === 200) {
+                            // Если успешный ответ, показываем контент
+                            return response.text().then(html => {
+                                document.getElementById('content').innerHTML = html;
+                                initializePage();
+                            });
+                        } else {
+                            // Ошибка
+                            return response.text().then(html => {
+                                document.getElementById('content').innerHTML = `
+                                    <div style="padding: 20px; background: #f8d7da; border-radius: 5px;">
+                                        <h3>Error ${response.status}</h3>
+                                        <pre>${html}</pre>
+                                    </div>
+                                `;
+                            });
+                        }
+                    }).catch(error => {
+                        console.error('Form submission error:', error);
+                        alert('Form submission failed: ' + error.message);
+                    });
                 }
-            } catch (error) {
-                document.getElementById('status').textContent = '⚠️ Status check failed';
-                document.getElementById('status').className = 'status offline';
             }
-        }
+        });
+    }
 
-async function loadContent() {
-    try {
-        const response = await fetch('/proxy/');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // ==================== DOM OBSERVER ====================
+            
+    let observer;
+
+    function startDOMObserver() {
+        if (observer) {
+            observer.disconnect();
+        }
         
-        const html = await response.text();
-        document.getElementById('content').innerHTML = html;
+        observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) {
+                        fixElementUrls(node);
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.getElementById('content'), {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    function fixElementUrls(element) {
+        if (!element.querySelector) return;
         
-        // Запускаем все перехватчики
+        const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
+        const selectors = attributes.map(attr => `[${attr}]`).join(',');
+        
+        const elementsWithUrls = element.querySelectorAll ? 
+            element.querySelectorAll(selectors) : [];
+        
+        // Фиксим атрибуты самого элемента
+        if (element.hasAttributes && element.hasAttributes()) {
+            Array.from(element.attributes).forEach(attr => {
+                if (attributes.includes(attr.name)) {
+                    const fixedValue = fixUrl(attr.value);
+                    if (fixedValue !== attr.value) {
+                        element.setAttribute(attr.name, fixedValue);
+                    }
+                }
+            });
+        }
+        
+        // Фиксим атрибуты потомков
+        elementsWithUrls.forEach(el => {
+            attributes.forEach(attr => {
+                if (el.hasAttribute(attr)) {
+                    const value = el.getAttribute(attr);
+                    const fixedValue = fixUrl(value);
+                    if (fixedValue !== value) {
+                        el.setAttribute(attr, fixedValue);
+                    }
+                }
+            });
+        });
+
+        // Фиксим inline стили
+        const elementsWithStyle = element.querySelectorAll ? 
+            element.querySelectorAll('[style]') : [];
+        elementsWithStyle.forEach(el => {
+            const style = el.getAttribute('style');
+            if (style && style.includes('url(/')) {
+                const fixedStyle = style.replace(
+                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
+                    'url("/proxy/$2")'
+                );
+                el.setAttribute('style', fixedStyle);
+            }
+        });
+
+        // Фиксим теги style
+        const styleTags = element.querySelectorAll ? 
+            element.querySelectorAll('style') : [];
+        styleTags.forEach(style => {
+            style.textContent = style.textContent.replace(
+                /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
+                'url("/proxy/$2")'
+            );
+        });
+    }
+
+    function fixAllLinks() {
+        const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
+        
+        attributes.forEach(attr => {
+            const elements = document.querySelectorAll(`[${attr}]`);
+            elements.forEach(element => {
+                const value = element.getAttribute(attr);
+                if (value) {
+                    const fixedValue = fixUrl(value);
+                    if (fixedValue !== value) {
+                        element.setAttribute(attr, fixedValue);
+                    }
+                }
+            });
+        });
+
+        // Фиксим inline стили
+        const elementsWithStyle = document.querySelectorAll('[style]');
+        elementsWithStyle.forEach(element => {
+            const style = element.getAttribute('style');
+            if (style && style.includes('url(/')) {
+                const fixedStyle = style.replace(
+                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
+                    'url("/proxy/$2")'
+                );
+                element.setAttribute('style', fixedStyle);
+            }
+        });
+
+        // Фиксим теги style
+        const styleTags = document.querySelectorAll('style');
+        styleTags.forEach(style => {
+            style.textContent = style.textContent.replace(
+                /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
+                'url("/proxy/$2")'
+            );
+        });
+    }
+
+    // ==================== ОСНОВНАЯ ЛОГИКА ====================
+
+    // Функция для инициализации всей страницы
+    function initializePage() {
         startDOMObserver();
         fixAllLinks();
         interceptDynamicEvents();
         interceptGlobalUrls();
         interceptForms();
-        
-        // Перехватываем выполнение inline JavaScript
         interceptInlineScripts();
-        
-    } catch (error) {
-        document.getElementById('content').innerHTML = `
-            <div style="text-align: center; padding: 50px;">
-                <h3>❌ Content Loading Failed</h3>
-                <p>Error: ${error.message}</p>
-                <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                    Retry
-                </button>
-            </div>
-        `;
     }
-}
+            
+    async function checkStatus() {
+        try {
+            const response = await fetch('/health');
+            const data = await response.json();
+            
+            const statusElement = document.getElementById('status');
+            if (data.laptops > 0) {
+                statusElement.textContent = `✅ Tunnel Online - ${data.laptops} laptop connected`;
+                statusElement.className = 'status online';
+                loadContent();
+            } else {
+                statusElement.textContent = '❌ Tunnel Offline - No laptops connected';
+                statusElement.className = 'status offline';
+                showOfflineMessage();
+            }
+        } catch (error) {
+            document.getElementById('status').textContent = '⚠️ Status check failed';
+            document.getElementById('status').className = 'status offline';
+        }
+    }
 
-        function showOfflineMessage() {
+    async function loadContent() {
+        try {
+            const response = await fetch('/proxy/');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const html = await response.text();
+            document.getElementById('content').innerHTML = html;
+            
+            // Инициализируем всю страницу
+            initializePage();
+            
+        } catch (error) {
             document.getElementById('content').innerHTML = `
                 <div style="text-align: center; padding: 50px;">
-                    <h3>💻 No Laptop Connected</h3>
-                    <p>Please start your laptop client to establish the connection.</p>
-                    <p>Once connected, this page will automatically refresh.</p>
-                    <button onclick="checkStatus()" style="padding: 10px 20px; margin: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                        Check Again
+                    <h3>❌ Content Loading Failed</h3>
+                    <p>Error: ${error.message}</p>
+                    <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        Retry
                     </button>
                 </div>
             `;
         }
+    }
 
-        // Запускаем проверку статуса
-        checkStatus();
-        
-        // Авто-обновление каждые 5 секунд если офлайн
-        setInterval(() => {
-            const statusElement = document.getElementById('status');
-            if (statusElement && statusElement.className.includes('offline')) {
-                checkStatus();
-            }
-        }, 5000);
+    function showOfflineMessage() {
+        document.getElementById('content').innerHTML = `
+            <div style="text-align: center; padding: 50px;">
+                <h3>💻 No Laptop Connected</h3>
+                <p>Please start your laptop client to establish the connection.</p>
+                <p>Once connected, this page will automatically refresh.</p>
+                <button onclick="checkStatus()" style="padding: 10px 20px; margin: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Check Again
+                </button>
+            </div>
+        `;
+    }
 
-        // Глобальные функции для отладки
-        window.debugProxy = {
-            disable: function() {
-                window.fetch = originalFetch;
-                XMLHttpRequest.prototype.open = originalXHROpen;
-                XMLHttpRequest.prototype.send = originalXHRSend;
-                history.pushState = originalPushState;
-                history.replaceState = originalReplaceState;
-                console.log('🔓 Proxy disabled');
-            },
-            enable: function() {
-                window.fetch = function(...args) {
-                    let url = args[0];
-                    if (typeof url === 'string') {
-                        args[0] = fixUrl(url);
-                    }
-                    return originalFetch.apply(this, args);
-                };
-                console.log('🔒 Proxy enabled');
-            },
-            testSearch: function(query) {
-                const testUrl = `/search/?query=${encodeURIComponent(query)}`;
-                console.log('Testing search URL:', testUrl);
-                window.location.href = fixUrl(testUrl);
-            }
-        };
-</script>
+    // Запускаем проверку статуса
+    checkStatus();
+    
+    // Авто-обновление каждые 5 секунд если офлайн
+    setInterval(() => {
+        const statusElement = document.getElementById('status');
+        if (statusElement && statusElement.className.includes('offline')) {
+            checkStatus();
+        }
+    }, 5000);
+
+    // Глобальные функции для отладки
+    window.debugProxy = {
+        disable: function() {
+            window.fetch = originalFetch;
+            XMLHttpRequest.prototype.open = originalXHROpen;
+            XMLHttpRequest.prototype.send = originalXHRSend;
+            history.pushState = originalPushState;
+            history.replaceState = originalReplaceState;
+            console.log('🔓 Proxy disabled');
+        },
+        enable: function() {
+            window.fetch = function(...args) {
+                let url = args[0];
+                if (typeof url === 'string') {
+                    args[0] = fixUrl(url);
+                }
+                return originalFetch.apply(this, args);
+            };
+            console.log('🔒 Proxy enabled');
+        },
+        testCatalog: function() {
+            const testUrl = `/catalog/`;
+            console.log('Testing catalog URL:', testUrl);
+            window.location.href = fixUrl(testUrl);
+        },
+        testCatalogSearch: function(query) {
+            const testUrl = `/catalog/?q=${encodeURIComponent(query)}`;
+            console.log('Testing catalog search:', testUrl);
+            window.location.href = fixUrl(testUrl);
+        },
+        testUrl: function(url) {
+            console.log('Testing URL:', url, '→', fixUrl(url));
+            return fixUrl(url);
+        }
+    };
+    </script>
 </body>
 </html>
