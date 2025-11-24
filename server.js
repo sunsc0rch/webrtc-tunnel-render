@@ -43,19 +43,29 @@ app.get('/health', (req, res) => {
   });
 });
 
-// В server.js добавьте:
-app.get('/catalog/*', (req, res) => {
-  // Перенаправляем через прокси
+// Универсальный перехватчик для всех маршрутов, кроме системных
+app.all('*', (req, res, next) => {
+  const excludedPaths = ['/', '/status', '/health', '/proxy', '/proxy/*', '/test-query'];
+  const isExcluded = excludedPaths.some(path => {
+    if (path.endsWith('/*')) {
+      const basePath = path.slice(0, -2);
+      return req.path.startsWith(basePath);
+    }
+    return req.path === path;
+  });
+
+  if (isExcluded) {
+    return next(); // Пропускаем системные маршруты
+  }
+
+  // Для всех остальных маршрутов - редирект через прокси
   const queryString = new URLSearchParams(req.query).toString();
-  const proxyUrl = `/proxy/catalog/${req.params[0]}${queryString ? '?' + queryString : ''}`;
-  res.redirect(proxyUrl);
+  const proxyPath = `/proxy${req.path}${queryString ? '?' + queryString : ''}`;
+  
+  console.log(`🔄 Universal redirect: ${req.path} -> ${proxyPath}`);
+  res.redirect(proxyPath);
 });
 
-app.get('/catalog', (req, res) => {
-  const queryString = new URLSearchParams(req.query).toString();
-  const proxyUrl = `/proxy/catalog/${queryString ? '?' + queryString : ''}`;
-  res.redirect(proxyUrl);
-});
 // ТЕСТОВЫЙ МАРШРУТ ДЛЯ ДИАГНОСТИКИ
 app.get('/test-query', (req, res) => {
   console.log('=== TEST QUERY DEBUG ===');
@@ -70,7 +80,7 @@ app.get('/test-query', (req, res) => {
   });
 });
 
-// Функция для фиксации HTML контента
+// УЛУЧШЕННАЯ функция для фиксации HTML контента
 function fixHtmlContent(html, currentPath = '') {
   if (!html || typeof html !== 'string') return html;
   
@@ -88,10 +98,40 @@ function fixHtmlContent(html, currentPath = '') {
     'url("/proxy/$2")'
   );
   
-  // Заменяем URL в JavaScript (простые случаи)
+  // Заменяем AJAX-запросы в JavaScript
+  fixedHtml = fixedHtml.replace(
+    /fetch\(["'](\/(?!\/))([^"']*)["']/g,
+    'fetch("/proxy/$2"'
+  );
+  
+  fixedHtml = fixedHtml.replace(
+    /\.get\(["'](\/(?!\/))([^"']*)["']/g,
+    '.get("/proxy/$2"'
+  );
+  
+  fixedHtml = fixedHtml.replace(
+    /\.post\(["'](\/(?!\/))([^"']*)["']/g,
+    '.post("/proxy/$2"'
+  );
+  
+  // Заменяем XMLHttpRequest
+  fixedHtml = fixedHtml.replace(
+    /\.open\([^,]+,\s*["'](\/(?!\/))([^"']*)["']/g,
+    (match, p1, p2) => {
+      return match.replace(`"/${p2}"`, `"/proxy/${p2}"`);
+    }
+  );
+  
+  // Заменяем window.location
   fixedHtml = fixedHtml.replace(
     /window\.location\s*=\s*["'](\/(?!\/))([^"']*)["']/g,
     'window.location = "/proxy/$2"'
+  );
+  
+  // Заменяем history.pushState/replaceState
+  fixedHtml = fixedHtml.replace(
+    /(pushState|replaceState)\([^,]+,\s*[^,]+,\s*["'](\/(?!\/))([^"']*)["']/g,
+    '$1(null, "", "/proxy/$3"'
   );
   
   // Добавляем base tag если его нет
@@ -111,7 +151,7 @@ function getContentType(headers) {
   return (contentType || 'text/html').toLowerCase();
 }
 
-// Основной прокси-маршрут
+// Основной прокси-маршрут (оставляем без изменений)
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
@@ -300,4 +340,5 @@ server.listen(PORT, () => {
   console.log(`   http://localhost:${PORT}/status    - Status page`);
   console.log(`   http://localhost:${PORT}/health    - Health check`);
   console.log(`   http://localhost:${PORT}/proxy/*   - HTTP proxy to laptop`);
+  console.log(`🎯 Universal proxy: ALL other routes will be redirected through /proxy/`);
 });
