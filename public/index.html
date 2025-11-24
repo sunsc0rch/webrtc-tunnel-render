@@ -110,6 +110,30 @@ function fixUrl(url) {
     }
     return url;
 }
+// ==================== ПЕРЕХВАТ ГЛОБАЛЬНЫХ URL ====================
+
+// Перехватываем глобальные переменные которые могут содержать URL
+function interceptGlobalUrls() {
+    // Если есть глобальные переменные с URL (например, в Django templates)
+    if (window.django && window.django.urls) {
+        const originalReverse = window.django.urls.reverse;
+        if (originalReverse) {
+            window.django.urls.reverse = function(name, args, kwargs) {
+                const url = originalReverse.call(this, name, args, kwargs);
+                return fixUrl(url);
+            };
+        }
+    }
+    
+    // Перехватываем возможные глобальные URL переменные
+    const urlProperties = ['catalogUrl', 'searchUrl', 'apiUrl', 'baseUrl'];
+    urlProperties.forEach(prop => {
+        if (window[prop] && typeof window[prop] === 'string') {
+            window[prop] = fixUrl(window[prop]);
+        }
+    });
+}
+    
 // Перехватываем все события которые могут создавать запросы
 function interceptDynamicEvents() {
     // Перехватываем создание новых элементов с обработчиками
@@ -161,6 +185,31 @@ function isStaticAsset(url) {
     ];
     
     return staticPatterns.some(pattern => url.includes(pattern));
+}
+// ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
+
+// Функция для перехвата inline скриптов
+function interceptInlineScripts() {
+    const scripts = document.querySelectorAll('script');
+    scripts.forEach(script => {
+        if (!script.src && script.textContent) {
+            // Заменяем URL в inline скриптах
+            let scriptContent = script.textContent;
+            
+            // Заменяем пути в JavaScript коде
+            scriptContent = scriptContent.replace(
+                /(['"])(\/catalog\/[^'"]*?\?[^'"]*?)(['"])/g, 
+                '$1/proxy$2$3'
+            );
+            
+            scriptContent = scriptContent.replace(
+                /fetch\((['"])(\/catalog\/[^'"]*?)(['"])/g, 
+                'fetch($1/proxy$2$3'
+            );
+            
+            script.textContent = scriptContent;
+        }
+    });
 }
     
 // Перехватываем fetch запросы
@@ -475,30 +524,6 @@ async function loadContent() {
             </div>
         `;
     }
-}
-
-// Функция для перехвата inline скриптов
-function interceptInlineScripts() {
-    const scripts = document.querySelectorAll('script');
-    scripts.forEach(script => {
-        if (!script.src && script.textContent) {
-            // Заменяем URL в inline скриптах
-            let scriptContent = script.textContent;
-            
-            // Заменяем пути в JavaScript коде
-            scriptContent = scriptContent.replace(
-                /(['"])(\/catalog\/[^'"]*?\?[^'"]*?)(['"])/g, 
-                '$1/proxy$2$3'
-            );
-            
-            scriptContent = scriptContent.replace(
-                /fetch\((['"])(\/catalog\/[^'"]*?)(['"])/g, 
-                'fetch($1/proxy$2$3'
-            );
-            
-            script.textContent = scriptContent;
-        }
-    });
 }
 
         function showOfflineMessage() {
