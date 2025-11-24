@@ -447,31 +447,59 @@ history.replaceState = function(state, title, url) {
             }
         }
 
-        async function loadContent() {
-            try {
-                const response = await fetch('/proxy/');
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
-                const html = await response.text();
-                document.getElementById('content').innerHTML = html;
-                
-                // Запускаем все фиксаторы
-                startDOMObserver();
-                fixAllLinks();
-                interceptForms();
-                
-            } catch (error) {
-                document.getElementById('content').innerHTML = `
-                    <div style="text-align: center; padding: 50px;">
-                        <h3>❌ Content Loading Failed</h3>
-                        <p>Error: ${error.message}</p>
-                        <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                            Retry
-                        </button>
-                    </div>
-                `;
-            }
+async function loadContent() {
+    try {
+        const response = await fetch('/proxy/');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const html = await response.text();
+        document.getElementById('content').innerHTML = html;
+        
+        // Запускаем все перехватчики
+        startDOMObserver();
+        fixAllLinks();
+        interceptDynamicEvents();
+        interceptGlobalUrls();
+        
+        // Перехватываем выполнение inline JavaScript
+        interceptInlineScripts();
+        
+    } catch (error) {
+        document.getElementById('content').innerHTML = `
+            <div style="text-align: center; padding: 50px;">
+                <h3>❌ Content Loading Failed</h3>
+                <p>Error: ${error.message}</p>
+                <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Функция для перехвата inline скриптов
+function interceptInlineScripts() {
+    const scripts = document.querySelectorAll('script');
+    scripts.forEach(script => {
+        if (!script.src && script.textContent) {
+            // Заменяем URL в inline скриптах
+            let scriptContent = script.textContent;
+            
+            // Заменяем пути в JavaScript коде
+            scriptContent = scriptContent.replace(
+                /(['"])(\/catalog\/[^'"]*?\?[^'"]*?)(['"])/g, 
+                '$1/proxy$2$3'
+            );
+            
+            scriptContent = scriptContent.replace(
+                /fetch\((['"])(\/catalog\/[^'"]*?)(['"])/g, 
+                'fetch($1/proxy$2$3'
+            );
+            
+            script.textContent = scriptContent;
         }
+    });
+}
 
         function showOfflineMessage() {
             document.getElementById('content').innerHTML = `
