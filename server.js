@@ -88,7 +88,17 @@ function getContentType(headers) {
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
-  console.log(`📨 HTTP ${req.method} /proxy/${targetPath}`);
+  // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
+  console.log('=== PROXY REQUEST DEBUG ===');
+  console.log('📨 Full URL:', req.originalUrl);
+  console.log('🔧 Method:', req.method);
+  console.log('📍 Path:', targetPath);
+  console.log('❓ Query params:', req.query);
+  console.log('📋 Headers:', {
+    host: req.headers.host,
+    'content-type': req.headers['content-type'],
+    'user-agent': req.headers['user-agent']
+  });
   
   if (laptops.size === 0) {
     return res.status(503).send(`
@@ -122,7 +132,17 @@ app.all('/proxy/*', async (req, res) => {
       'accept': '*/*',
       'connection': 'close'
     }
+    query: req.query 
   };
+
+  // Логируем что отправляем
+  console.log('📤 Sending to laptop:', JSON.stringify({
+    type: requestData.type,
+    id: requestData.id,
+    method: requestData.method,
+    path: requestData.path,
+    query: requestData.query
+  }, null, 2));
 
   // Удаляем проблемные headers
   delete requestData.headers.host;
