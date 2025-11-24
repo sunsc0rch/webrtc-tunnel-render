@@ -77,21 +77,57 @@
     </div>
 
     <script>
-        // ==================== ПЕРЕХВАТ AJAX/FETCH ЗАПРОСОВ ====================
+        // ==================== УЛУЧШЕННЫЙ ПЕРЕХВАТ AJAX/FETCH ====================
         
-        // Сохраняем оригинальные функции
         const originalFetch = window.fetch;
         const originalXHROpen = XMLHttpRequest.prototype.open;
         const originalXHRSend = XMLHttpRequest.prototype.send;
+
+        // Функция для проверки и фиксации URL
+        function fixUrl(url) {
+            if (typeof url !== 'string') return url;
+            
+            // Если это относительный URL (начинается с /) и не начинается с // или /proxy/
+            if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+                // Сохраняем query параметры если есть
+                const urlObj = new URL(url, window.location.origin);
+                const fixedUrl = '/proxy' + urlObj.pathname + urlObj.search;
+                console.log('🔀 URL proxied:', url, '→', fixedUrl);
+                return fixedUrl;
+            }
+            return url;
+        }
 
         // Перехватываем fetch запросы
         window.fetch = function(...args) {
             let url = args[0];
             
-            // Если это относительный URL, добавляем /proxy
-            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                args[0] = '/proxy' + url;
-                console.log('🔀 Fetch proxied:', url, '→', args[0]);
+            // Фиксим URL если нужно
+            if (typeof url === 'string') {
+                args[0] = fixUrl(url);
+            }
+            
+            // Также фиксим URL в Request объекте
+            if (args[0] instanceof Request) {
+                const request = args[0];
+                const url = request.url;
+                if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+                    const fixedUrl = fixUrl(url);
+                    args[0] = new Request(fixedUrl, {
+                        method: request.method,
+                        headers: request.headers,
+                        body: request.body,
+                        referrer: request.referrer,
+                        referrerPolicy: request.referrerPolicy,
+                        mode: request.mode,
+                        credentials: request.credentials,
+                        cache: request.cache,
+                        redirect: request.redirect,
+                        integrity: request.integrity,
+                        keepalive: request.keepalive,
+                        signal: request.signal
+                    });
+                }
             }
             
             return originalFetch.apply(this, args);
@@ -99,53 +135,162 @@
 
         // Перехватываем XMLHttpRequest
         XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-            // Если это относительный URL, добавляем /proxy
-            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                const originalUrl = url;
-                url = '/proxy' + url;
-                console.log('🔀 XHR proxied:', originalUrl, '→', url);
+            // Фиксим URL если нужно
+            if (typeof url === 'string') {
+                url = fixUrl(url);
             }
             
             return originalXHROpen.call(this, method, url, ...rest);
         };
 
-        // ==================== ФИКСАЦИЯ ДИНАМИЧЕСКИХ URL ====================
+        // ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
         
-        // Наблюдатель за изменениями DOM для динамически добавляемых элементов
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === 1) { // Element node
-                        fixElementUrls(node);
-                    }
-                });
-            });
+        // Перехватываем все клики по ссылкам
+        document.addEventListener('click', (event) => {
+            const link = event.target.closest('a');
+            if (link && link.href) {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
+                    event.preventDefault();
+                    const fixedHref = fixUrl(href);
+                    window.location.href = fixedHref;
+                }
+            }
         });
 
-        // Функция для фиксации URL в элементе и его потомках
+        // Перехватываем history API
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+
+        history.pushState = function(state, title, url) {
+            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+                url = fixUrl(url);
+            }
+            return originalPushState.call(this, state, title, url);
+        };
+
+        history.replaceState = function(state, title, url) {
+            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
+                url = fixUrl(url);
+            }
+            return originalReplaceState.call(this, state, title, url);
+        };
+
+        // ==================== ПЕРЕХВАТ ФОРМ ====================
+        
+        function interceptForms() {
+            document.addEventListener('submit', function(event) {
+                const form = event.target;
+                const action = form.getAttribute('action');
+                
+                if (action && action.startsWith('/') && !action.startsWith('//') && !action.startsWith('/proxy/')) {
+                    event.preventDefault();
+                    
+                    const formData = new FormData(form);
+                    const method = (form.getAttribute('method') || 'GET').toUpperCase();
+                    
+                    if (method === 'GET') {
+                        // Для GET - создаем URL с параметрами
+                        const params = new URLSearchParams(formData);
+                        const searchString = params.toString() ? '?' + params.toString() : '';
+                        const fixedUrl = fixUrl(action + searchString);
+                        window.location.href = fixedUrl;
+                    } else {
+                        // Для POST - отправляем через fetch
+                        const fixedUrl = fixUrl(action);
+                        fetch(fixedUrl, {
+                            method: method,
+                            body: formData,
+                            headers: {
+                                'Accept': 'text/html,application/xhtml+xml,application/xml'
+                            }
+                        }).then(response => {
+                            if (response.redirected) {
+                                // Если редирект, переходим по новому URL
+                                window.location.href = response.url;
+                            } else if (response.status === 200) {
+                                // Если успешный ответ, показываем контент
+                                return response.text().then(html => {
+                                    document.getElementById('content').innerHTML = html;
+                                    fixAllLinks();
+                                    interceptForms();
+                                    startDOMObserver();
+                                });
+                            } else {
+                                // Ошибка
+                                return response.text().then(html => {
+                                    document.getElementById('content').innerHTML = `
+                                        <div style="padding: 20px; background: #f8d7da; border-radius: 5px;">
+                                            <h3>Error ${response.status}</h3>
+                                            <pre>${html}</pre>
+                                        </div>
+                                    `;
+                                });
+                            }
+                        }).catch(error => {
+                            console.error('Form submission error:', error);
+                            alert('Form submission failed: ' + error.message);
+                        });
+                    }
+                }
+            });
+        }
+
+        // ==================== DOM OBSERVER ====================
+        
+        let observer;
+
+        function startDOMObserver() {
+            if (observer) {
+                observer.disconnect();
+            }
+            
+            observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) {
+                            fixElementUrls(node);
+                        }
+                    });
+                });
+            });
+
+            observer.observe(document.getElementById('content'), {
+                childList: true,
+                subtree: true
+            });
+        }
+
         function fixElementUrls(element) {
             if (!element.querySelector) return;
             
-            // Фиксим все атрибуты с URL
             const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
             const selectors = attributes.map(attr => `[${attr}]`).join(',');
             
             const elementsWithUrls = element.querySelectorAll ? 
                 element.querySelectorAll(selectors) : [];
             
+            // Фиксим атрибуты самого элемента
             if (element.hasAttributes && element.hasAttributes()) {
                 Array.from(element.attributes).forEach(attr => {
                     if (attributes.includes(attr.name)) {
-                        fixAttributeUrl(element, attr.name, attr.value);
+                        const fixedValue = fixUrl(attr.value);
+                        if (fixedValue !== attr.value) {
+                            element.setAttribute(attr.name, fixedValue);
+                        }
                     }
                 });
             }
             
+            // Фиксим атрибуты потомков
             elementsWithUrls.forEach(el => {
                 attributes.forEach(attr => {
                     if (el.hasAttribute(attr)) {
                         const value = el.getAttribute(attr);
-                        fixAttributeUrl(el, attr, value);
+                        const fixedValue = fixUrl(value);
+                        if (fixedValue !== value) {
+                            el.setAttribute(attr, fixedValue);
+                        }
                     }
                 });
             });
@@ -175,11 +320,43 @@
             });
         }
 
-        function fixAttributeUrl(element, attr, value) {
-            if (value && typeof value === 'string' && 
-                value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/proxy/')) {
-                element.setAttribute(attr, '/proxy' + value);
-            }
+        function fixAllLinks() {
+            const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
+            
+            attributes.forEach(attr => {
+                const elements = document.querySelectorAll(`[${attr}]`);
+                elements.forEach(element => {
+                    const value = element.getAttribute(attr);
+                    if (value) {
+                        const fixedValue = fixUrl(value);
+                        if (fixedValue !== value) {
+                            element.setAttribute(attr, fixedValue);
+                        }
+                    }
+                });
+            });
+
+            // Фиксим inline стили
+            const elementsWithStyle = document.querySelectorAll('[style]');
+            elementsWithStyle.forEach(element => {
+                const style = element.getAttribute('style');
+                if (style && style.includes('url(/')) {
+                    const fixedStyle = style.replace(
+                        /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
+                        'url("/proxy/$2")'
+                    );
+                    element.setAttribute('style', fixedStyle);
+                }
+            });
+
+            // Фиксим теги style
+            const styleTags = document.querySelectorAll('style');
+            styleTags.forEach(style => {
+                style.textContent = style.textContent.replace(
+                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
+                    'url("/proxy/$2")'
+                );
+            });
         }
 
         // ==================== ОСНОВНАЯ ЛОГИКА ====================
@@ -213,16 +390,9 @@
                 const html = await response.text();
                 document.getElementById('content').innerHTML = html;
                 
-                // Запускаем наблюдатель за изменениями DOM
-                observer.observe(document.getElementById('content'), {
-                    childList: true,
-                    subtree: true
-                });
-                
-                // Фиксим все ссылки в загруженном контенте
+                // Запускаем все фиксаторы
+                startDOMObserver();
                 fixAllLinks();
-                
-                // Перехватываем формы
                 interceptForms();
                 
             } catch (error) {
@@ -238,81 +408,6 @@
             }
         }
 
-        function fixAllLinks() {
-            const attributes = ['href', 'src', 'action', 'data-src', 'data-href', 'data-url', 'formaction'];
-            
-            attributes.forEach(attr => {
-                const elements = document.querySelectorAll(`[${attr}]`);
-                elements.forEach(element => {
-                    const value = element.getAttribute(attr);
-                    if (value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/proxy/')) {
-                        element.setAttribute(attr, '/proxy' + value);
-                    }
-                });
-            });
-
-            // Фиксим inline стили
-            const elementsWithStyle = document.querySelectorAll('[style]');
-            elementsWithStyle.forEach(element => {
-                const style = element.getAttribute('style');
-                if (style && style.includes('url(/')) {
-                    const fixedStyle = style.replace(
-                        /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g, 
-                        'url("/proxy/$2")'
-                    );
-                    element.setAttribute('style', fixedStyle);
-                }
-            });
-
-            // Фиксим теги style
-            const styleTags = document.querySelectorAll('style');
-            styleTags.forEach(style => {
-                style.textContent = style.textContent.replace(
-                    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
-                    'url("/proxy/$2")'
-                );
-            });
-        }
-
-        function interceptForms() {
-            // Перехватываем отправку форм
-            document.addEventListener('submit', function(event) {
-                const form = event.target;
-                const action = form.getAttribute('action');
-                
-                if (action && action.startsWith('/') && !action.startsWith('//') && !action.startsWith('/proxy/')) {
-                    event.preventDefault();
-                    
-                    // Создаем FormData
-                    const formData = new FormData(form);
-                    const method = (form.getAttribute('method') || 'GET').toUpperCase();
-                    
-                    if (method === 'GET') {
-                        // Для GET - собираем URL с параметрами
-                        const params = new URLSearchParams(formData);
-                        const url = '/proxy' + action + (params.toString() ? '?' + params.toString() : '');
-                        window.location.href = url;
-                    } else {
-                        // Для POST - отправляем через fetch
-                        fetch('/proxy' + action, {
-                            method: method,
-                            body: formData
-                        }).then(response => {
-                            if (response.redirected) {
-                                window.location.href = response.url;
-                            } else {
-                                return response.text().then(html => {
-                                    document.getElementById('content').innerHTML = html;
-                                    fixAllLinks();
-                                    interceptForms();
-                                });
-                            }
-                        });
-                    }
-                }
-            });
-        }
-
         function showOfflineMessage() {
             document.getElementById('content').innerHTML = `
                 <div style="text-align: center; padding: 50px;">
@@ -326,23 +421,16 @@
             `;
         }
 
-        // Перехватываем навигацию
-        document.addEventListener('click', (event) => {
-            const link = event.target.closest('a');
-            if (link && link.href) {
-                const href = link.getAttribute('href');
-                if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/proxy/')) {
-                    event.preventDefault();
-                    window.location.href = '/proxy' + href;
-                }
-            }
-        });
-
         // Запускаем проверку статуса
         checkStatus();
         
-        // Авто-обновление каждые 5 секунд
-        setInterval(checkStatus, 5000);
+        // Авто-обновление каждые 5 секунд если офлайн
+        setInterval(() => {
+            const statusElement = document.getElementById('status');
+            if (statusElement && statusElement.className.includes('offline')) {
+                checkStatus();
+            }
+        }, 5000);
 
         // Глобальные функции для отладки
         window.debugProxy = {
@@ -350,17 +438,24 @@
                 window.fetch = originalFetch;
                 XMLHttpRequest.prototype.open = originalXHROpen;
                 XMLHttpRequest.prototype.send = originalXHRSend;
+                history.pushState = originalPushState;
+                history.replaceState = originalReplaceState;
                 console.log('🔓 Proxy disabled');
             },
             enable: function() {
                 window.fetch = function(...args) {
                     let url = args[0];
-                    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/proxy/')) {
-                        args[0] = '/proxy' + url;
+                    if (typeof url === 'string') {
+                        args[0] = fixUrl(url);
                     }
                     return originalFetch.apply(this, args);
                 };
                 console.log('🔒 Proxy enabled');
+            },
+            testSearch: function(query) {
+                const testUrl = `/search/?query=${encodeURIComponent(query)}`;
+                console.log('Testing search URL:', testUrl);
+                window.location.href = fixUrl(testUrl);
             }
         };
     </script>
