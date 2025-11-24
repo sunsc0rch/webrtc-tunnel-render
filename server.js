@@ -43,6 +43,19 @@ app.get('/health', (req, res) => {
   });
 });
 
+// В server.js добавьте:
+app.get('/catalog/*', (req, res) => {
+  // Перенаправляем через прокси
+  const queryString = new URLSearchParams(req.query).toString();
+  const proxyUrl = `/proxy/catalog/${req.params[0]}${queryString ? '?' + queryString : ''}`;
+  res.redirect(proxyUrl);
+});
+
+app.get('/catalog', (req, res) => {
+  const queryString = new URLSearchParams(req.query).toString();
+  const proxyUrl = `/proxy/catalog/${queryString ? '?' + queryString : ''}`;
+  res.redirect(proxyUrl);
+});
 // ТЕСТОВЫЙ МАРШРУТ ДЛЯ ДИАГНОСТИКИ
 app.get('/test-query', (req, res) => {
   console.log('=== TEST QUERY DEBUG ===');
