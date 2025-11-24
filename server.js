@@ -13,6 +13,7 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(cors());
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
@@ -129,9 +130,14 @@ app.all('/proxy/*', async (req, res) => {
   delete requestData.headers['accept-encoding'];
   delete requestData.headers['referer'];
 
-  // Добавляем body только для методов, которые его поддерживают
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.body) {
-    requestData.body = req.body;
+  // Обрабатываем разные типы body
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+      // Для FormData передаем как есть (пока не поддерживается полноценно)
+      requestData.body = 'FORM_DATA_PLACEHOLDER';
+    } else if (req.body) {
+      requestData.body = req.body;
+    }
   }
 
   const timeout = setTimeout(() => {
