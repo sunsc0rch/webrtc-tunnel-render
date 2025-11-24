@@ -27,6 +27,8 @@ EOF
 
 copy laptop-client.js to ~/laptop-webrtc
 
+npm install
+
 run it 
 
 RENDER_SERVER=wss://your-webrtc-tunnel-app.onrender.com node laptop-client.js
