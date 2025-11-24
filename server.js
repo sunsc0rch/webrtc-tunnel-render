@@ -43,6 +43,20 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ТЕСТОВЫЙ МАРШРУТ ДЛЯ ДИАГНОСТИКИ
+app.get('/test-query', (req, res) => {
+  console.log('=== TEST QUERY DEBUG ===');
+  console.log('Full URL:', req.originalUrl);
+  console.log('Query params:', req.query);
+  console.log('Query keys:', Object.keys(req.query));
+  res.json({
+    originalUrl: req.originalUrl,
+    query: req.query,
+    queryKeys: Object.keys(req.query),
+    success: true
+  });
+});
+
 // Функция для фиксации HTML контента
 function fixHtmlContent(html, currentPath = '') {
   if (!html || typeof html !== 'string') return html;
@@ -131,7 +145,7 @@ app.all('/proxy/*', async (req, res) => {
       ...req.headers,
       'accept': '*/*',
       'connection': 'close'
-    }
+    },
     query: req.query 
   };
 
