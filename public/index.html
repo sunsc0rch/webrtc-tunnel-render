@@ -177,19 +177,6 @@ function interceptDynamicEvents() {
         return originalSetAttribute.call(this, name, value);
     };
 }
-
-   
-// Функция для проверки статических файлов
-function isStaticAsset(url) {
-    const staticPatterns = [
-        '/static/', '/media/', '/admin/', 
-        '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-        '.woff', '.woff2', '.ttf', '.eot',
-        '.map' // source maps
-    ];
-    
-    return staticPatterns.some(pattern => url.includes(pattern));
-}
 // ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
 
 // Функция для перехвата inline скриптов
@@ -261,7 +248,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     return originalXHROpen.call(this, method, url, ...rest);
 };
 
-        // ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
+// ==================== ПЕРЕХВАТ НАВИГАЦИИ ====================
         
 // Перехватываем все клики по ссылкам
 document.addEventListener('click', (event) => {
