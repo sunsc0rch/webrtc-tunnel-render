@@ -16,11 +16,9 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// Храним соединения
 const laptops = new Map();
 const browsers = new Map();
 
-// Генерируем ID для соединений
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
@@ -30,12 +28,10 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Страница статуса
 app.get('/status', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'status.html'));
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -46,7 +42,48 @@ app.get('/health', (req, res) => {
   });
 });
 
-// HTTP прокси к ноутбуку
+// Функция для фиксации HTML контента
+function fixHtmlContent(html, currentPath = '') {
+  if (!html || typeof html !== 'string') return html;
+  
+  let fixedHtml = html;
+  
+  // Заменяем все относительные ссылки
+  fixedHtml = fixedHtml.replace(
+    /(href|src|action)=["'](\/(?!\/))([^"']*)["']/g, 
+    '$1="/proxy/$3"'
+  );
+  
+  // Заменяем URL в CSS
+  fixedHtml = fixedHtml.replace(
+    /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
+    'url("/proxy/$2")'
+  );
+  
+  // Заменяем URL в JavaScript (простые случаи)
+  fixedHtml = fixedHtml.replace(
+    /window\.location\s*=\s*["'](\/(?!\/))([^"']*)["']/g,
+    'window.location = "/proxy/$2"'
+  );
+  
+  // Добавляем base tag если его нет
+  if (!fixedHtml.includes('<base') && fixedHtml.includes('</head>')) {
+    fixedHtml = fixedHtml.replace(
+      '</head>',
+      '<base href="/proxy/" target="_top"></head>'
+    );
+  }
+  
+  return fixedHtml;
+}
+
+// Функция для определения типа контента
+function getContentType(headers) {
+  const contentType = headers['content-type'] || headers['Content-Type'];
+  return (contentType || 'text/html').toLowerCase();
+}
+
+// Основной прокси-маршрут
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
@@ -90,6 +127,7 @@ app.all('/proxy/*', async (req, res) => {
   delete requestData.headers.host;
   delete requestData.headers['content-length'];
   delete requestData.headers['accept-encoding'];
+  delete requestData.headers['referer'];
 
   // Добавляем body только для методов, которые его поддерживают
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.body) {
@@ -111,14 +149,25 @@ app.all('/proxy/*', async (req, res) => {
         
         console.log(`✅ Response ${requestId}: ${message.status}`);
         
-        // Передаем headers и body как есть
+        // Передаем headers
         if (message.headers) {
           Object.entries(message.headers).forEach(([key, value]) => {
-            res.setHeader(key, value);
+            if (key.toLowerCase() !== 'content-length') {
+              res.setHeader(key, value);
+            }
           });
         }
         
-        res.status(message.status || 200).send(message.body || '');
+        let responseBody = message.body || '';
+        const contentType = getContentType(message.headers);
+        
+        // Фиксим HTML и CSS контент
+        if (contentType.includes('text/html') || contentType.includes('text/css')) {
+          console.log(`🔧 Fixing URLs in ${contentType}`);
+          responseBody = fixHtmlContent(responseBody, targetPath);
+        }
+        
+        res.status(message.status || 200).send(responseBody);
       }
     } catch (error) {
       console.error('Error parsing response:', error);
@@ -189,17 +238,13 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// ФИКС: Проверяем, не запущен ли уже сервер
-if (!server.listening) {
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    console.log(`🚀 WebRTC Tunnel Server running on port ${PORT}`);
-    console.log(`📊 Endpoints:`);
-    console.log(`   http://localhost:${PORT}/          - Main page`);
-    console.log(`   http://localhost:${PORT}/status    - Status page`);
-    console.log(`   http://localhost:${PORT}/health    - Health check`);
-    console.log(`   http://localhost:${PORT}/proxy/*   - HTTP proxy to laptop`);
-  });
-} else {
-  console.log('ℹ️  Server already listening');
-}
+// Запуск сервера
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`🚀 WebRTC Tunnel Server running on port ${PORT}`);
+  console.log(`📊 Endpoints:`);
+  console.log(`   http://localhost:${PORT}/          - Main page`);
+  console.log(`   http://localhost:${PORT}/status    - Status page`);
+  console.log(`   http://localhost:${PORT}/health    - Health check`);
+  console.log(`   http://localhost:${PORT}/proxy/*   - HTTP proxy to laptop`);
+});
