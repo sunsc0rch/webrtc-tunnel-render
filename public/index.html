@@ -110,7 +110,47 @@ function fixUrl(url) {
     }
     return url;
 }
+// Перехватываем все события которые могут создавать запросы
+function interceptDynamicEvents() {
+    // Перехватываем создание новых элементов с обработчиками
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+        const element = originalCreateElement.call(this, tagName);
+        
+        if (tagName.toLowerCase() === 'form') {
+            setTimeout(() => {
+                if (element.hasAttribute('action')) {
+                    const action = element.getAttribute('action');
+                    const fixedAction = fixUrl(action);
+                    if (fixedAction !== action) {
+                        element.setAttribute('action', fixedAction);
+                    }
+                }
+            }, 0);
+        }
+        
+        return element;
+    };
     
+    // Перехватываем установку атрибутов
+    const originalSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function(name, value) {
+        if ((name === 'action' || name === 'href' || name === 'src') && 
+            typeof value === 'string' && 
+            value.startsWith('/') && 
+            !value.startsWith('//') && 
+            !value.startsWith('/proxy/') &&
+            !isStaticAsset(value)) {
+            
+            const fixedValue = fixUrl(value);
+            return originalSetAttribute.call(this, name, fixedValue);
+        }
+        return originalSetAttribute.call(this, name, value);
+    };
+}
+
+// Запускаем перехват динамических событий
+interceptDynamicEvents();    
 // Функция для проверки статических файлов
 function isStaticAsset(url) {
     const staticPatterns = [
