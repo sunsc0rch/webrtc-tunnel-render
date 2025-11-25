@@ -1,4 +1,5 @@
-Experimental webrtc proxy app for tunnel connections via external node
+Experimental webrtc proxy for tunneling traffic or sharing your local app(website,service etc) via any free simple hosting with js/html support
+
 
 Deploy this to your hosting with node.js or express.js(Render,glitch,keroku for example)
 
