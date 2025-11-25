@@ -296,25 +296,33 @@ function fixSingleCookie(cookieHeader, req) {
   delete requestData.headers['accept-encoding'];
   delete requestData.headers['referer'];
 
+// В server.js, в основном прокси-маршруте, обновите обработку тела запроса:
+
 // Обрабатываем разные типы body
 if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    if (req.headers['content-type']?.includes('multipart/form-data') || 
-        req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-        
-        // Для FormData и urlencoded - передаем как строку
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+        // Для FormData с файлами - передаем как есть
+        console.log('📤 Multipart form data detected');
+        requestData.body = req.body; // Express уже обработал multipart
+        requestData.hasBody = true;
+    } else if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+        // Для обычных форм - передаем как строку
         if (req.body && typeof req.body === 'object') {
-            // Конвертируем объект в URL encoded string
             const formData = new URLSearchParams();
             for (const [key, value] of Object.entries(req.body)) {
                 formData.append(key, value);
             }
             requestData.body = formData.toString();
-            requestData.headers['content-type'] = 'application/x-www-form-urlencoded';
+            requestData.hasBody = true;
         } else {
             requestData.body = req.body || '';
+            requestData.hasBody = !!req.body;
         }
     } else if (req.body) {
         requestData.body = req.body;
+        requestData.hasBody = true;
+    } else {
+        requestData.hasBody = false;
     }
 }
 
