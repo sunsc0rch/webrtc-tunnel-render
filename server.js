@@ -183,7 +183,72 @@ app.all('/proxy/*', async (req, res) => {
       </html>
     `);
   }
+  
+// Функция для универсальной фиксации cookies
+function fixCookiesForProxy(cookies, req) {
+    if (!cookies) return cookies;
+        
+    if (Array.isArray(cookies)) {
+        return cookies.map(cookie => fixSingleCookie(cookie, req));
+    } else if (typeof cookies === 'string') {
+        return fixSingleCookie(cookies, req);
+    }
+    
+    return cookies;
+}
 
+// Функция для фиксации одной cookie
+function fixSingleCookie(cookieHeader, req) {
+    if (!cookieHeader || typeof cookieHeader !== 'string') return cookieHeader;
+    
+    // Разбираем cookie на части
+    const cookieParts = cookieHeader.split(';').map(part => part.trim());
+    const fixedParts = [];
+    
+    for (let i = 0; i < cookieParts.length; i++) {
+        const part = cookieParts[i];
+        
+        if (i === 0) {
+            // Первая часть - name=value, оставляем как есть
+            fixedParts.push(part);
+            continue;
+        }
+        
+        // Обрабатываем атрибуты
+        if (part.toLowerCase().startsWith('domain=')) {
+            // Заменяем domain на текущий хост
+            const currentDomain = req.headers.host.split(':')[0];
+            fixedParts.push(`Domain=${currentDomain}`);
+        } else if (part.toLowerCase().startsWith('path=')) {
+            // Оставляем path как есть, или устанавливаем /
+            fixedParts.push(part);
+        } else if (part.toLowerCase() === 'secure') {
+            // Для HTTPS оставляем secure, для HTTP убираем
+            if (req.headers['x-forwarded-proto'] === 'https' || req.secure) {
+                fixedParts.push('Secure');
+            }
+            // Иначе не добавляем Secure атрибут
+        } else if (part.toLowerCase().startsWith('samesite=')) {
+            // Оставляем SameSite как есть
+            fixedParts.push(part);
+        } else if (part.toLowerCase().startsWith('max-age=') || 
+                   part.toLowerCase().startsWith('expires=') ||
+                   part.toLowerCase() === 'httponly') {
+            // Сохраняем другие важные атрибуты
+            fixedParts.push(part);
+        }
+        // Игнорируем другие атрибуты которые могут мешать
+    }
+    
+    // Добавляем SameSite=Lax если не указан
+    if (!fixedParts.some(part => part.toLowerCase().startsWith('samesite='))) {
+        fixedParts.push('SameSite=Lax');
+    }
+    
+    const fixedCookie = fixedParts.join('; ');
+    
+    return fixedCookie;
+}
   const [laptopWs] = laptops.entries().next().value;
   const requestId = generateId();
   
@@ -244,73 +309,72 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     res.status(504).send('Request timeout');
   }, 30000);
 
-  const responseHandler = (data) => {
+ const responseHandler = (data) => {
     try {
-      const message = JSON.parse(data);
-      
-      if (message.type === 'http-response' && message.id === requestId) {
-        clearTimeout(timeout);
-        laptopWs.removeListener('message', responseHandler);
+        const message = JSON.parse(data);
         
-        console.log(`✅ Response ${requestId}: ${message.status}`);
-        
-            // Передаем headers (ВКЛЮЧАЯ COOKIE HEADERS)
+        if (message.type === 'http-response' && message.id === requestId) {
+            clearTimeout(timeout);
+            laptopWs.removeListener('message', responseHandler);
+            
+            console.log(`✅ Response ${requestId}: ${message.status}`);
+            
+            // Передаем headers
             if (message.headers) {
                 Object.entries(message.headers).forEach(([key, value]) => {
-                    // Передаем все headers кроме content-length
                     if (key.toLowerCase() !== 'content-length') {
-                        // Особое внимание для cookie и set-cookie
                         if (key.toLowerCase() === 'set-cookie') {
-                            // Фиксим domain и path в cookies
-                            let fixedCookies = value;
-                            if (Array.isArray(value)) {
-                                fixedCookies = value.map(cookie => 
-                                    cookie.replace(
-                                        /domain=[^;]+/gi, 
-                                        'domain=' + req.headers.host.split(':')[0]
-                                    ).replace(
-                                        /path=[^;]+/gi, 
-                                        'path=/'
-                                    )
-                                );
-                            } else {
-                                fixedCookies = value.replace(
-                                    /domain=[^;]+/gi, 
-                                    'domain=' + req.headers.host.split(':')[0]
-                                ).replace(
-                                    /path=[^;]+/gi, 
-                                    'path=/'
-                                );
-                            }
+                            // УНИВЕРСАЛЬНАЯ ОБРАБОТКА COOKIES
+                            const fixedCookies = fixCookiesForProxy(value, req);
                             res.setHeader(key, fixedCookies);
+                            
+                            // Логируем установленные cookies
+                            if (fixedCookies) {
+                                const cookieArray = Array.isArray(fixedCookies) ? fixedCookies : [fixedCookies];
+                                cookieArray.forEach(cookie => {
+                                    const cookieName = cookie.split('=')[0];
+                                    console.log(`🍪 Setting cookie: ${cookieName}`);
+                                });
+                            }
                         } else {
                             res.setHeader(key, value);
                         }
                     }
                 });
             }
-            // Передаем cookies из response
-            if (message.cookies) {
+            
+            // Также обрабатываем cookies из message.cookies (если есть)
+            if (message.cookies && message.cookies.length > 0) {
                 message.cookies.forEach(cookie => {
-                    res.cookie(cookie.name, cookie.value, cookie.options);
+                    const cookieString = `${cookie.name}=${cookie.value}; Path=/; Domain=${req.headers.host.split(':')[0]}; SameSite=Lax`;
+                    
+                    const existingSetCookie = res.getHeader('set-cookie');
+                    if (existingSetCookie) {
+                        if (Array.isArray(existingSetCookie)) {
+                            res.setHeader('set-cookie', [...existingSetCookie, cookieString]);
+                        } else {
+                            res.setHeader('set-cookie', [existingSetCookie, cookieString]);
+                        }
+                    } else {
+                        res.setHeader('set-cookie', cookieString);
+                    }
                 });
             }
-        
-        let responseBody = message.body || '';
-        const contentType = getContentType(message.headers);
-        
-        // Фиксим HTML и CSS контент
-        if (contentType.includes('text/html') || contentType.includes('text/css')) {
-          console.log(`🔧 Fixing URLs in ${contentType}`);
-          responseBody = fixHtmlContent(responseBody, targetPath);
+            
+            let responseBody = message.body || '';
+            const contentType = getContentType(message.headers);
+            
+            if (contentType.includes('text/html') || contentType.includes('text/css')) {
+                console.log(`🔧 Fixing URLs in ${contentType}`);
+                responseBody = fixHtmlContent(responseBody, targetPath);
+            }
+            
+            res.status(message.status || 200).send(responseBody);
         }
-        
-        res.status(message.status || 200).send(responseBody);
-      }
     } catch (error) {
-      console.error('Error parsing response:', error);
+        console.error('Error parsing response:', error);
     }
-  };
+};
 
   laptopWs.on('message', responseHandler);
   
