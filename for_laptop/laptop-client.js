@@ -1,191 +1,326 @@
 import WebSocket from 'ws';
 import fetch from 'node-fetch';
 
-// Конфигурация
-const RENDER_SERVER = process.env.RENDER_SERVER || 'wss://webrtc-tunnel-render.onrender.com';
-const LOCAL_APP_URL = process.env.LOCAL_APP_URL || 'http://localhost:8100';
-const RECONNECT_DELAY = 5000;
+const RENDER_SERVER = 'wss://webrtc-tunnel-render.onrender.com';
+const LOCAL_APP_URL = 'http://localhost:8100';
 
-class TunnelClient {
-    constructor() {
-        this.ws = null;
-        this.clientId = null;
-        this.isConnected = false;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 10;
+// Хранилище для cookies (сессия)
+const cookieJar = new Map();
+
+const ws = new WebSocket(RENDER_SERVER);
+
+ws.on('open', () => {
+    console.log('✅ Connected to tunnel server');
+    
+    const clientId = 'laptop-' + Math.random().toString(36).substr(2, 8);
+    ws.send(JSON.stringify({
+        type: 'register-laptop',
+        id: clientId
+    }));
+});
+
+function extractCookies(headers, url) {
+    const cookies = [];
+    
+    if (headers['set-cookie']) {
+        let setCookieHeaders = headers['set-cookie'];
         
-        this.connect();
-    }
-
-    connect() {
-        try {
-            console.log(`🔗 Connecting to: ${RENDER_SERVER}`);
-            
-            this.ws = new WebSocket(RENDER_SERVER);
-            this.setupEventHandlers();
-            
-        } catch (error) {
-            console.error('❌ Connection error:', error);
-            this.scheduleReconnect();
+        // Если это массив - уже разбито, если строка - нужно разбить по запятым
+        if (!Array.isArray(setCookieHeaders)) {
+            // Важно: разбиваем по запятой, но учитываем даты в Expires
+            setCookieHeaders = splitSetCookieHeaders(setCookieHeaders);
         }
-    }
-
-    setupEventHandlers() {
-        this.ws.on('open', () => {
-            console.log('✅ Connected to tunnel server');
-            this.isConnected = true;
-            this.reconnectAttempts = 0;
+        
+        console.log(`🍪 Processing ${setCookieHeaders.length} Set-Cookie headers:`, setCookieHeaders);
+        
+        setCookieHeaders.forEach(cookieHeader => {
+            if (!cookieHeader || typeof cookieHeader !== 'string') return;
             
-            this.clientId = 'laptop-' + Math.random().toString(36).substr(2, 8);
-            this.ws.send(JSON.stringify({
-                type: 'register-laptop',
-                id: this.clientId,
-                userAgent: 'node-webrtc-client'
-            }));
-        });
-
-        this.ws.on('message', async (data) => {
-            try {
-                const message = JSON.parse(data);
-                await this.handleMessage(message);
-            } catch (error) {
-                console.error('❌ Message handling error:', error);
+            console.log(`🍪 Raw Set-Cookie: ${cookieHeader}`);
+            
+            // Извлекаем первую часть до точки с запятой - name=value
+            const firstSemicolon = cookieHeader.indexOf(';');
+            const nameValuePart = firstSemicolon !== -1 
+                ? cookieHeader.substring(0, firstSemicolon).trim()
+                : cookieHeader.trim();
+            
+            const [name, value] = nameValuePart.split('=');
+            
+            if (name && value) {
+                // Создаем объект cookie
+                const cookie = {
+                    name: name.trim(),
+                    value: value.trim(),
+                    header: cookieHeader,
+                    attributes: {}
+                };
+                
+                // Парсим атрибуты (все что после первого ;)
+                if (firstSemicolon !== -1) {
+                    const attributesPart = cookieHeader.substring(firstSemicolon + 1);
+                    const attributes = attributesPart.split(';').map(attr => attr.trim());
+                    
+                    attributes.forEach(attr => {
+                        if (!attr) return;
+                        const [attrName, attrValue] = attr.split('=');
+                        if (attrName) {
+                            cookie.attributes[attrName.toLowerCase().trim()] = attrValue ? attrValue.trim() : true;
+                        }
+                    });
+                }
+                
+                cookies.push(cookie);
+                
+                // Сохраняем в cookie jar
+                cookieJar.set(cookie.name, cookie.value);
+                console.log(`🍪 Saved cookie: ${cookie.name}=${cookie.value}`);
+                
+                // Особое логирование для важных cookies
+                if (cookie.name === 'sessionid') {
+                    console.log('🎉 SESSION COOKIE SAVED! User should be logged in.');
+                } else if (cookie.name === 'csrftoken') {
+                    console.log('🛡️ CSRF token updated');
+                }
             }
         });
-
-        this.ws.on('close', (code, reason) => {
-            console.log(`🔌 Connection closed: ${code} - ${reason}`);
-            this.isConnected = false;
-            this.scheduleReconnect();
-        });
-
-        this.ws.on('error', (error) => {
-            console.error('❌ WebSocket error:', error);
-            this.isConnected = false;
-        });
     }
-
-    async handleMessage(message) {
-        switch (message.type) {
-            case 'welcome':
-                console.log(`👋 Server welcome: ${message.server}`);
-                break;
-                
-            case 'registered':
-                console.log(`✅ Registered with ID: ${message.id}`);
-                this.clientId = message.id;
-                break;
-                
-            case 'http-request':
-                await this.handleHttpRequest(message);
-                break;
-                
-            case 'ping':
-                this.ws.send(JSON.stringify({ type: 'pong' }));
-                break;
-                
-            default:
-                console.log('📨 Unknown message type:', message.type);
-        }
-    }
-
-    async handleHttpRequest(message) {
-        const { id, method, path, headers, body } = message;
-        
-        console.log(`📨 HTTP ${method} ${path} (ID: ${id})`);
-        
-        try {
-            // Подготавливаем опции для fetch
-            const fetchOptions = {
-                method: method,
-                headers: this.cleanHeaders(headers),
-                // Для GET/HEAD запросов НЕ включаем body
-                body: this.shouldIncludeBody(method) ? body : undefined
-            };
-
-            const response = await fetch(`${LOCAL_APP_URL}${path}`, fetchOptions);
-            const responseBody = await response.text();
-            
-            // Отправляем ответ обратно
-            this.ws.send(JSON.stringify({
-                type: 'http-response',
-                id: id,
-                status: response.status,
-                headers: {
-                    'content-type': response.headers.get('content-type') || 'text/html',
-                    'cache-control': response.headers.get('cache-control') || 'no-cache',
-                    'content-length': responseBody.length.toString()
-                },
-                body: responseBody
-            }));
-            
-            console.log(`✅ Responded to ${id}: ${response.status}`);
-            
-        } catch (error) {
-            console.error(`❌ Error handling request ${id}:`, error);
-            
-            this.ws.send(JSON.stringify({
-                type: 'http-response',
-                id: id,
-                status: 502,
-                headers: { 'content-type': 'text/plain' },
-                body: `WebRTC Tunnel Error: ${error.message}`
-            }));
-        }
-    }
-
-    cleanHeaders(headers) {
-        const clean = { ...headers };
-        
-        // Удаляем проблемные headers
-        delete clean.host;
-        delete clean['content-length'];
-        delete clean['accept-encoding'];
-        delete clean.connection;
-        delete clean['sec-fetch-mode'];
-        delete clean['sec-fetch-site'];
-        delete clean['sec-fetch-dest'];
-        
-        // Добавляем необходимые headers
-        clean.connection = 'close';
-        clean.accept = '*/*';
-        
-        return clean;
-    }
-
-    shouldIncludeBody(method) {
-        // Только эти методы могут иметь body
-        const methodsWithBody = ['POST', 'PUT', 'PATCH', 'DELETE'];
-        return methodsWithBody.includes(method.toUpperCase());
-    }
-
-    scheduleReconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.log('❌ Max reconnection attempts reached. Exiting.');
-            process.exit(1);
-        }
-        
-        this.reconnectAttempts++;
-        const delay = RECONNECT_DELAY * this.reconnectAttempts;
-        
-        console.log(`🔄 Reconnecting in ${delay/1000} seconds... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        
-        setTimeout(() => {
-            this.connect();
-        }, delay);
-    }
+    
+    // Диагностика
+    console.log(`🍪 Total cookies processed: ${cookies.length}`);
+    console.log(`🍪 Cookie jar now has: ${cookieJar.size} cookies`);
+    console.log('🍪 Current cookie jar:', Array.from(cookieJar.entries()));
+    
+    return cookies;
 }
 
-// Запуск клиента
-console.log('🚀 WebRTC Laptop Client Starting...');
-console.log(`📡 Server: ${RENDER_SERVER}`);
-console.log(`💻 Local App: ${LOCAL_APP_URL}`);
-console.log('Press Ctrl+C to stop\n');
+// Функция для правильного разбиения Set-Cookie headers
+function splitSetCookieHeaders(headerString) {
+    if (!headerString) return [];
+    
+    const cookies = [];
+    let currentCookie = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < headerString.length; i++) {
+        const char = headerString[i];
+        
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        }
+        
+        if (char === ',' && !inQuotes) {
+            // Нашли разделитель cookies (не внутри кавычек)
+            if (currentCookie.trim()) {
+                cookies.push(currentCookie.trim());
+                currentCookie = '';
+            }
+        } else {
+            currentCookie += char;
+        }
+    }
+    
+    // Добавляем последнюю cookie
+    if (currentCookie.trim()) {
+        cookies.push(currentCookie.trim());
+    }
+    
+    return cookies;
+}
+// Функция для создания cookie header из cookie jar
+function createCookieHeader() {
+    const cookies = [];
+    for (const [name, value] of cookieJar) {
+        cookies.push(`${name}=${value}`);
+    }
+    
+    const header = cookies.join('; ');
+    if (header) {
+        console.log(`🍪 Sending ${cookies.length} cookies:`, cookies.map(c => c.split('=')[0]));
+    }
+    return header;
+}
+ws.on('message', async (data) => {
+    try {
+        const message = JSON.parse(data);
+        
+        if (message.type === 'http-request') {
+            // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
+            console.log('=== LAPTOP REQUEST DEBUG ===');
+            console.log('📨 Received message:', JSON.stringify({
+                type: message.type,
+                id: message.id,
+                method: message.method,
+                path: message.path,
+                query: message.query,
+                hasBody: !!message.body
+            }, null, 2));
+            
+            // СОБИРАЕМ ПОЛНЫЙ URL
+            let fullUrl = `${LOCAL_APP_URL}${message.path}`;
+            
+            // ДОБАВЛЯЕМ QUERY ПАРАМЕТРЫ
+            if (message.query && Object.keys(message.query).length > 0) {
+                const params = new URLSearchParams(message.query);
+                const queryString = params.toString();
+                fullUrl += '?' + queryString;
+                console.log(`🔗 Query params added: ${queryString}`);
+                console.log(`🔑 Query keys: ${Object.keys(message.query)}`);
+            } else {
+                console.log('⚠️ No query parameters in message');
+            }
+            
+            console.log(`🎯 Final URL: ${fullUrl}`);
+            
+            // ПОДГОТАВЛИВАЕМ HEADERS
+            const headers = {
+                ...message.headers,
+                'host': 'localhost:8100',
+                'connection': 'close',
+                // Добавляем важные headers для Django
+                'x-forwarded-proto': 'https',
+                'x-forwarded-host': 'webrtc-tunnel-render.onrender.com',
+                'x-real-ip': '127.0.0.1'
+            };
+            
+            // УДАЛЯЕМ ПРОБЛЕМНЫЕ HEADERS
+            delete headers['content-length'];
+            delete headers['accept-encoding'];
+            delete headers['referer'];
+            
+            // ДОБАВЛЯЕМ COOKIES ИЗ COOKIE JAR
+            const cookieHeader = createCookieHeader();
+            if (cookieHeader) {
+                headers['cookie'] = cookieHeader;
+                console.log(`🍪 Sending cookies: ${cookieHeader}`);
+            }
+            
+            // ДОБАВЛЯЕМ COOKIES ИЗ ВХОДЯЩЕГО ЗАПРОСА
+            if (message.headers && message.headers.cookie) {
+                // Объединяем с существующими cookies
+                if (headers['cookie']) {
+                    headers['cookie'] += '; ' + message.headers.cookie;
+                } else {
+                    headers['cookie'] = message.headers.cookie;
+                }
+                console.log(`🍪 Added incoming cookies: ${message.headers.cookie}`);
+            }
+            
+            const fetchOptions = {
+                method: message.method,
+                headers: headers,
+                // Важно: следуем редиректам
+                redirect: 'manual'
+            };
+            
+            // ОБРАБОТКА ТЕЛА ЗАПРОСА
+	if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
+    	if (message.body === 'FORM_DATA_PLACEHOLDER') {
+        	// Для FormData - передаем как есть
+        	fetchOptions.body = message.body;
+    	} else if (typeof message.body === 'string') {
+        	fetchOptions.body = message.body;
+        
+	        // Автоматически определяем Content-Type
+	        if (message.body.includes('csrfmiddlewaretoken') ||
+	            message.body.includes('username') ||
+	            message.body.includes('password') ||
+	            message.body.includes('application/x-www-form-urlencoded')) {
+	            headers['content-type'] = 'application/x-www-form-urlencoded';
+	        }
+	    } else if (typeof message.body === 'object') {
+	        fetchOptions.body = JSON.stringify(message.body);
+	        headers['content-type'] = 'application/json';
+	    }
+	}
+            try {
+                console.log(`🚀 Fetching: ${fullUrl}`);
+                console.log(`📋 Headers:`, JSON.stringify(headers, null, 2));
+                
+                const response = await fetch(fullUrl, fetchOptions);
+                const body = await response.text();
+                
+                console.log(`✅ Response status: ${response.status}, length: ${body.length}`);
+                
+                // СОБИРАЕМ ВСЕ HEADERS ОТВЕТА
+                const responseHeaders = {};
+                response.headers.forEach((value, key) => {
+                    responseHeaders[key] = value;
+                });
+                
+                // ИЗВЛЕКАЕМ И СОХРАНЯЕМ COOKIES ИЗ ОТВЕТА
+                const cookies = extractCookies(responseHeaders, fullUrl);
+                
+                // ПОДГОТАВЛИВАЕМ ОТВЕТ ДЛЯ ОТПРАВКИ
+                const responseMessage = {
+                    type: 'http-response',
+                    id: message.id,
+                    status: response.status,
+                    headers: responseHeaders,
+                    body: body
+                };
+                
+                // ДОБАВЛЯЕМ COOKIES В ОТВЕТ ДЛЯ СЕРВЕРА
+                if (cookies.length > 0) {
+                    responseMessage.cookies = cookies;
+                }
+                
+                ws.send(JSON.stringify(responseMessage));
+                
+                // ЛОГИРУЕМ COOKIES
+                if (cookies.length > 0) {
+                    console.log(`🍪 Received ${cookies.length} cookies from response`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Fetch error:', error);
+                ws.send(JSON.stringify({
+                    type: 'http-response', 
+                    id: message.id,
+                    status: 502,
+                    headers: {'Content-Type': 'text/plain'},
+                    body: `Error: ${error.message}`
+                }));
+            }
+        }
+        else if (message.type === 'welcome') {
+            console.log(`👋 ${message.server}`);
+        }
+        else if (message.type === 'registered') {
+            console.log(`✅ Registered: ${message.id}`);
+        }
+        else if (message.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+        }
+    } catch (error) {
+        console.error('❌ Message error:', error);
+    }
+});
 
-new TunnelClient();
+ws.on('close', () => {
+    console.log('🔌 Disconnected from tunnel server');
+    // Очищаем cookies при разрыве соединения
+    cookieJar.clear();
+    console.log('🍪 Cookie jar cleared');
+});
 
-// Graceful shutdown
+ws.on('error', (error) => {
+    console.error('❌ WebSocket error:', error);
+});
+
+// Обработка graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\n👋 Shutting down gracefully...');
+    console.log('🛑 Shutting down laptop client...');
+    ws.close();
     process.exit(0);
 });
+
+process.on('SIGTERM', () => {
+    console.log('🛑 Shutting down laptop client...');
+    ws.close();
+    process.exit(0);
+});
+
+console.log('🚀 Starting laptop client...');
+console.log('📡 Connecting to:', RENDER_SERVER);
+console.log('💻 Proxying to:', LOCAL_APP_URL);
+console.log('🍪 Cookie session enabled');
