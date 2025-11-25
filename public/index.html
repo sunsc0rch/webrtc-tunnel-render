@@ -78,6 +78,39 @@
 
 
 <script>
+    function checkStatus() {
+        fetch('/health')
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById('status');
+                if (data.laptops > 0) {
+                    statusDiv.innerHTML = `
+                        <div style="color: green; font-weight: bold;">
+                            ✅ Tunnel is ONLINE
+                        </div>
+                        <div>Connected laptops: ${data.laptops}</div>
+                        <div>Connected browsers: ${data.browsers}</div>
+                        <div><a href="/proxy/">Go to proxied site</a></div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div style="color: red; font-weight: bold;">
+                            ❌ Tunnel is OFFLINE
+                        </div>
+                        <div>No laptops connected. Please start your laptop client.</div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('status').innerHTML = `
+                    <div style="color: orange; font-weight: bold;">
+                        ⚠️ Status check failed
+                    </div>
+                    <div>Error: ${error.message}</div>
+                `;
+            });
+    }
+    
 // ==================== ДИАГНОСТИКА И ПЕРЕХВАТ ====================
     
 console.log('🚀 INIT: Proxy script loading...');
