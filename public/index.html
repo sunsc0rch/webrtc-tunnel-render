@@ -522,13 +522,6 @@ function overrideExistingFunctions() {
                 }
             });
         });
-
-            // Особое внимание для Bootstrap dropdowns
-            const dropdowns = document.querySelectorAll('.dropdown-toggle, [data-bs-toggle="dropdown"]');
-            console.log(`🎯 Found ${dropdowns.length} dropdown elements`);
-            dropdowns.forEach(dropdown => {
-                console.log('📦 Dropdown element:', dropdown);
-        });
         
         // Фиксим inline стили
         const elementsWithStyle = document.querySelectorAll('[style]');
@@ -550,43 +543,139 @@ function overrideExistingFunctions() {
                 /url\(["']?(\/(?!\/))([^"')]*)["']?\)/g,
                 'url("/proxy/$2")'
             );
-        });
-        
-    // Инициализируем Bootstrap JavaScript компоненты
-    initializeBootstrapComponents();
+        }); 
+        initializeBootstrapComponents();
     }
     
 function initializeBootstrapComponents() {    
-    // Инициализируем dropdowns
-    const dropdowns = document.querySelectorAll('.dropdown-toggle');
-    dropdowns.forEach(dropdown => {        
-        // Удаляем существующие обработчики
-        dropdown.replaceWith(dropdown.cloneNode(true));
+    // 1. Инициализируем navbar toggler
+    const navbarTogglers = document.querySelectorAll('.navbar-toggler');
+    navbarTogglers.forEach(toggler => {
+        toggler.addEventListener('click', function() {
+            const target = this.getAttribute('data-bs-target');
+            if (target) {
+                const targetElement = document.querySelector(target);
+                if (targetElement) {
+                    targetElement.classList.toggle('show');
+                }
+            }
+        });
+    });
+
+    // 2. Инициализируем dropdowns
+    const dropdownToggles = document.querySelectorAll('.dropdown-toggle');
+    
+    dropdownToggles.forEach(toggle => {
+        // Удаляем старые обработчики
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
         
-        // Добавляем простой обработчик для демонстрации
-        const newDropdown = document.querySelector('[data-bs-toggle="dropdown"]');
-        if (newDropdown) {
-            newDropdown.addEventListener('click', function(e) {
+        // Добавляем новые обработчики
+        newToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const dropdownMenu = this.nextElementSibling;
+            if (dropdownMenu && dropdownMenu.classList.contains('dropdown-menu')) {
+                // Закрываем все остальные dropdowns
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                    if (menu !== dropdownMenu) {
+                        menu.classList.remove('show');
+                    }
+                });
+                
+                // Переключаем текущий dropdown
+                dropdownMenu.classList.toggle('show');
+            }
+        });
+        
+        // Добавляем обработчик для ссылок внутри dropdown
+        const dropdownMenu = newToggle.nextElementSibling;
+        if (dropdownMenu) {
+            dropdownMenu.addEventListener('click', function(e) {
+                e.stopPropagation(); // Предотвращаем закрытие при клике на меню
+            });
+        }
+    });
+
+    // 3. Закрываем dropdowns при клике вне их
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.dropdown')) {
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                menu.classList.remove('show');
+            });
+        }
+    });
+
+    // 4. Инициализируем формы поиска
+    const searchForms = document.querySelectorAll('form[action*="search"]');
+    searchForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const action = this.getAttribute('action');
+            const query = this.querySelector('input[name="query"]').value;
+            const searchUrl = fixUrl(action) + '?query=' + encodeURIComponent(query);
+            loadSpecificUrl(searchUrl);
+        });
+    });
+
+    // 5. Инициализируем формы выхода
+    const logoutForms = document.querySelectorAll('form[action*="logout"]');
+    logoutForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const action = this.getAttribute('action');
+            const method = this.getAttribute('method') || 'post';
+            submitForm(this, action, method, new FormData(this));
+        });
+    });
+}
+    
+function fixUserAvatars() {
+    const avatars = document.querySelectorAll('img[src*="avatar"], .navbar img[src]');
+    avatars.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('/') && !src.startsWith('/proxy/') && !src.startsWith('/static/')) {
+            const fixedSrc = '/proxy' + src;
+            img.setAttribute('src', fixedSrc);
+        }
+    });
+}
+    
+function rebindComplexInteractions() {
+    
+    // Перехватываем все элементы с data-bs- атрибутами
+    const bsElements = document.querySelectorAll('[data-bs-toggle], [data-bs-target]');
+    bsElements.forEach(el => {
+        const toggle = el.getAttribute('data-bs-toggle');
+        const target = el.getAttribute('data-bs-target');
+        
+        if (toggle === 'collapse' && target) {
+            el.addEventListener('click', function(e) {
                 e.preventDefault();
-                const menu = this.nextElementSibling;
-                if (menu && menu.classList.contains('dropdown-menu')) {
-                    menu.classList.toggle('show');
-                    console.log('🎯 Dropdown toggled');
+                const targetEl = document.querySelector(target);
+                if (targetEl) {
+                    targetEl.classList.toggle('show');
                 }
             });
         }
     });
 
-    // Закрываем dropdown при клике вне его
-    document.addEventListener('click', function(e) {
-        if (!e.target.matches('.dropdown-toggle')) {
-            const openMenus = document.querySelectorAll('.dropdown-menu.show');
-            openMenus.forEach(menu => {
-                menu.classList.remove('show');
-            });
-        }
+    // Перехватываем все кнопки с dropdown
+    const dropdownButtons = document.querySelectorAll('.dropdown > .btn[data-bs-toggle="dropdown"]');
+    dropdownButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const menu = this.nextElementSibling;
+            if (menu && menu.classList.contains('dropdown-menu')) {
+                menu.classList.toggle('show');
+            }
+        });
     });
+    // Исправляем аватары пользователей
+    fixUserAvatars();
 }
+
    // ==================== ОСНОВНАЯ ЛОГИКА ====================
 
 async function loadContent() {
@@ -609,6 +698,8 @@ async function loadContent() {
         startDOMObserver();
         fixAllLinks();
         interceptDynamicEvents();
+        rebindComplexInteractions();
+        initializeBootstrapComponents();
         
         // Принудительно перехватываем события
         setTimeout(() => {
