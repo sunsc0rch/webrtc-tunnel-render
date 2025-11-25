@@ -607,19 +607,7 @@ function initializeBootstrapComponents() {
         }
     });
 
-    // 4. Инициализируем формы поиска
-    const searchForms = document.querySelectorAll('form[action*="search"]');
-    searchForms.forEach(form => {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const action = this.getAttribute('action');
-            const query = this.querySelector('input[name="query"]').value;
-            const searchUrl = fixUrl(action) + '?query=' + encodeURIComponent(query);
-            loadSpecificUrl(searchUrl);
-        });
-    });
-
-    // 5. Инициализируем формы выхода
+    // 4. Инициализируем формы выхода
     const logoutForms = document.querySelectorAll('form[action*="logout"]');
     logoutForms.forEach(form => {
         form.addEventListener('submit', function(e) {
