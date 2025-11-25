@@ -523,6 +523,13 @@ function overrideExistingFunctions() {
             });
         });
 
+            // Особое внимание для Bootstrap dropdowns
+            const dropdowns = document.querySelectorAll('.dropdown-toggle, [data-bs-toggle="dropdown"]');
+            console.log(`🎯 Found ${dropdowns.length} dropdown elements`);
+            dropdowns.forEach(dropdown => {
+                console.log('📦 Dropdown element:', dropdown);
+        });
+        
         // Фиксим inline стили
         const elementsWithStyle = document.querySelectorAll('[style]');
         elementsWithStyle.forEach(element => {
@@ -544,8 +551,42 @@ function overrideExistingFunctions() {
                 'url("/proxy/$2")'
             );
         });
+        
+    // Инициализируем Bootstrap JavaScript компоненты
+    initializeBootstrapComponents();
     }
+    
+function initializeBootstrapComponents() {    
+    // Инициализируем dropdowns
+    const dropdowns = document.querySelectorAll('.dropdown-toggle');
+    dropdowns.forEach(dropdown => {        
+        // Удаляем существующие обработчики
+        dropdown.replaceWith(dropdown.cloneNode(true));
+        
+        // Добавляем простой обработчик для демонстрации
+        const newDropdown = document.querySelector('[data-bs-toggle="dropdown"]');
+        if (newDropdown) {
+            newDropdown.addEventListener('click', function(e) {
+                e.preventDefault();
+                const menu = this.nextElementSibling;
+                if (menu && menu.classList.contains('dropdown-menu')) {
+                    menu.classList.toggle('show');
+                    console.log('🎯 Dropdown toggled');
+                }
+            });
+        }
+    });
 
+    // Закрываем dropdown при клике вне его
+    document.addEventListener('click', function(e) {
+        if (!e.target.matches('.dropdown-toggle')) {
+            const openMenus = document.querySelectorAll('.dropdown-menu.show');
+            openMenus.forEach(menu => {
+                menu.classList.remove('show');
+            });
+        }
+    });
+}
    // ==================== ОСНОВНАЯ ЛОГИКА ====================
 
 async function loadContent() {
@@ -565,9 +606,9 @@ async function loadContent() {
         overrideExistingFunctions();
         interceptGlobalUrls();
         interceptForms();
-        interceptDynamicEvents()
         startDOMObserver();
         fixAllLinks();
+        interceptDynamicEvents();
         
         // Принудительно перехватываем события
         setTimeout(() => {
