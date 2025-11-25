@@ -151,7 +151,7 @@ function getContentType(headers) {
   return (contentType || 'text/html').toLowerCase();
 }
 
-// Основной прокси-маршрут (оставляем без изменений)
+// Основной прокси-маршрут
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   
@@ -242,14 +242,47 @@ app.all('/proxy/*', async (req, res) => {
         
         console.log(`✅ Response ${requestId}: ${message.status}`);
         
-        // Передаем headers
-        if (message.headers) {
-          Object.entries(message.headers).forEach(([key, value]) => {
-            if (key.toLowerCase() !== 'content-length') {
-              res.setHeader(key, value);
+            // Передаем headers (ВКЛЮЧАЯ COOKIE HEADERS)
+            if (message.headers) {
+                Object.entries(message.headers).forEach(([key, value]) => {
+                    // Передаем все headers кроме content-length
+                    if (key.toLowerCase() !== 'content-length') {
+                        // Особое внимание для cookie и set-cookie
+                        if (key.toLowerCase() === 'set-cookie') {
+                            // Фиксим domain и path в cookies
+                            let fixedCookies = value;
+                            if (Array.isArray(value)) {
+                                fixedCookies = value.map(cookie => 
+                                    cookie.replace(
+                                        /domain=[^;]+/gi, 
+                                        'domain=' + req.headers.host.split(':')[0]
+                                    ).replace(
+                                        /path=[^;]+/gi, 
+                                        'path=/'
+                                    )
+                                );
+                            } else {
+                                fixedCookies = value.replace(
+                                    /domain=[^;]+/gi, 
+                                    'domain=' + req.headers.host.split(':')[0]
+                                ).replace(
+                                    /path=[^;]+/gi, 
+                                    'path=/'
+                                );
+                            }
+                            res.setHeader(key, fixedCookies);
+                        } else {
+                            res.setHeader(key, value);
+                        }
+                    }
+                });
             }
-          });
-        }
+            // Передаем cookies из response
+            if (message.cookies) {
+                message.cookies.forEach(cookie => {
+                    res.cookie(cookie.name, cookie.value, cookie.options);
+                });
+            }
         
         let responseBody = message.body || '';
         const contentType = getContentType(message.headers);
