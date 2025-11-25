@@ -166,7 +166,24 @@ app.all('/proxy/*', async (req, res) => {
     'content-type': req.headers['content-type'],
     'user-agent': req.headers['user-agent']
   });
-  
+  if (req.headers['content-type']?.includes('multipart/form-data')) {
+    console.log('📤 Multipart form data detected');
+    console.log('📦 Request body type:', typeof req.body);
+    console.log('📦 Request body keys:', req.body ? Object.keys(req.body) : 'no body');
+    
+    if (req.body && typeof req.body === 'object') {
+        // Проверяем наличие CSRF token в multipart данных
+        if (req.body.csrfmiddlewaretoken) {
+            console.log('🛡️ CSRF token in multipart request:', req.body.csrfmiddlewaretoken.substring(0, 10) + '...');
+        } else {
+            console.error('❌ CSRF token MISSING in multipart request!');
+            console.log('🔍 Available fields:', Object.keys(req.body));
+        }
+    }
+    
+    requestData.body = req.body;
+    requestData.hasBody = true;
+}
   if (laptops.size === 0) {
     return res.status(503).send(`
       <!DOCTYPE html>
