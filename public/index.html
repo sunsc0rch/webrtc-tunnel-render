@@ -382,64 +382,6 @@ function overrideExistingFunctions() {
         return originalReplaceState.call(this, state, title, url);
     };
 
-    // ==================== ПЕРЕХВАТ ФОРМ ====================
-            
-    function interceptForms() {
-        document.addEventListener('submit', function(event) {
-            const form = event.target;
-            const action = form.getAttribute('action');
-            
-            if (action && action.startsWith('/') && !action.startsWith('//') && !action.startsWith('/proxy/')) {
-                event.preventDefault();
-                
-                const formData = new FormData(form);
-                const method = (form.getAttribute('method') || 'GET').toUpperCase();
-                
-                if (method === 'GET') {
-                    // Для GET - создаем URL с параметрами
-                    const params = new URLSearchParams(formData);
-                    const searchString = params.toString() ? '?' + params.toString() : '';
-                    const fixedUrl = fixUrl(action + searchString);
-                    window.location.href = fixedUrl;
-                } else {
-                    // Для POST - отправляем через fetch
-                    const fixedUrl = fixUrl(action);
-                    fetch(fixedUrl, {
-                        method: method,
-                        body: formData,
-                        headers: {
-                            'Accept': 'text/html,application/xhtml+xml,application/xml'
-                        }
-                    }).then(response => {
-                        if (response.redirected) {
-                            // Если редирект, переходим по новому URL
-                            window.location.href = response.url;
-                        } else if (response.status === 200) {
-                            // Если успешный ответ, показываем контент
-                            return response.text().then(html => {
-                                document.getElementById('content').innerHTML = html;
-                                initializePage();
-                            });
-                        } else {
-                            // Ошибка
-                            return response.text().then(html => {
-                                document.getElementById('content').innerHTML = `
-                                    <div style="padding: 20px; background: #f8d7da; border-radius: 5px;">
-                                        <h3>Error ${response.status}</h3>
-                                        <pre>${html}</pre>
-                                    </div>
-                                `;
-                            });
-                        }
-                    }).catch(error => {
-                        console.error('Form submission error:', error);
-                        alert('Form submission failed: ' + error.message);
-                    });
-                }
-            }
-        });
-    }
-
     // ==================== DOM OBSERVER ====================
             
     let observer;
@@ -748,7 +690,8 @@ function initializeBootstrapComponents() {
         });
     });
 
-        document.addEventListener('submit', function(e) {
+    // ПЕРЕХВАТ ФОРМ - ОБНОВЛЕННАЯ ВЕРСИЯ
+    document.addEventListener('submit', function(e) {
         const form = e.target;
         const action = form.getAttribute('action');
         
@@ -759,6 +702,13 @@ function initializeBootstrapComponents() {
             
             const formData = new FormData(form);
             const method = (form.getAttribute('method') || 'GET').toUpperCase();
+            const isMultipart = form.enctype === 'multipart/form-data';
+            
+            console.log('🔐 Form intercepted:');
+            console.log('   - Action:', action);
+            console.log('   - Method:', method);
+            console.log('   - Multipart:', isMultipart);
+            console.log('   - FormData keys:', Array.from(formData.keys()));
             
             // ДОБАВЛЯЕМ CSRF TOKEN ЕСЛИ ЕГО НЕТ В ФОРМЕ
             const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -767,7 +717,11 @@ function initializeBootstrapComponents() {
                 if (csrfToken) {
                     formData.append('csrfmiddlewaretoken', csrfToken);
                     console.log('🔐 Added CSRF token to intercepted form');
+                } else {
+                    console.error('❌ No CSRF token available!');
                 }
+            } else {
+                console.log('🔐 CSRF token already in form');
             }
             
             if (method === 'GET') {
@@ -800,12 +754,12 @@ async function loadContent() {
         interceptInlineScripts();
         overrideExistingFunctions();
         interceptGlobalUrls();
-        interceptForms();
         startDOMObserver();
         fixAllLinks();
         interceptDynamicEvents();
         rebindComplexInteractions();
         initializeBootstrapComponents();
+        fixUserAvatars();
         
         // Принудительно перехватываем события
         setTimeout(() => {
@@ -825,7 +779,41 @@ async function loadContent() {
         `;
     }
 }
+    
+async function loadSpecificUrl(url) {
+    try {
+        console.log('🔗 Loading specific URL:', url);
+        const response = await fetch(url);
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const html = await response.text();
+        document.getElementById('content').innerHTML = html;
+        
+        // Реинициализируем все перехватчики
+        interceptInlineScripts();
+        fixAllLinks();
+        rebindComplexInteractions();
+        initializeBootstrapComponents();
+        
+    } catch (error) {
+        console.error('❌ Failed to load URL:', error);
+        showError(error);
+    }
+}
 
+
+function showError(error) {
+    document.getElementById('content').innerHTML = `
+        <div style="text-align: center; padding: 50px;">
+            <h3>❌ Error</h3>
+            <p>${error.message}</p>
+            <button onclick="loadContent()" style="padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Return to Home
+            </button>
+        </div>
+    `;
+}
 function rebindEventListeners() {
     console.log('🔧 Rebinding event listeners...');
     
