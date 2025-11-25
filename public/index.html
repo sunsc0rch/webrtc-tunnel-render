@@ -76,8 +76,35 @@
         <p style="text-align: center;">Loading content from your laptop...</p>
     </div>
 
-
+    <!-- Контент из прокси -->
+    <div id="proxy-content">
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading your application...</p>
+        </div>
+    </div>
 <script>
+        // ==================== СТАТУС ТУННЕЛЯ ====================
+        async function checkStatus() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('status');
+                
+                if (data.laptops > 0) {
+                    statusElement.className = 'status online';
+                    statusElement.innerHTML = '✅ Tunnel Online';
+                } else {
+                    statusElement.className = 'status offline';
+                    statusElement.innerHTML = '❌ Tunnel Offline';
+                }
+            } catch (error) {
+                document.getElementById('status').className = 'status warning';
+                document.getElementById('status').innerHTML = '⚠️ Status Unknown';
+            }
+        }
+
 // ==================== ДИАГНОСТИКА И ПЕРЕХВАТ ====================
     
 console.log('🚀 INIT: Proxy script loading...');
@@ -629,6 +656,13 @@ function performSearchViaProxy() {
 // ==================== ЗАПУСК ====================
 
 console.log('🎯 Proxy system initialized');
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Initializing WebRTC Tunnel Proxy...');
+            // Загружаем статус туннеля
+            checkStatus();
+            setInterval(checkStatus, 5000);
+            loadContent();
+       });
 // Экспортируем для отладки
 window.proxyDebug = {
     fixUrl,
