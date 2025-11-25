@@ -610,19 +610,26 @@ function rebindComplexInteractions() {
     fixUserAvatars();
 }
 
-    async function submitForm(form, action, method, formData) {
+async function submitForm(form, action, method, formData) {
     try {
         const fixedUrl = fixUrl(action);
         
         // Получаем CSRF token из cookies
         const csrfToken = getCSRFTokenFromCookies();
-        // ДОБАВЛЯЕМ CSRF TOKEN В FORMDATA ЕСЛИ ЕГО ЕЩЕ НЕТ
-        // Но только если это не multipart/form-data (для файлов нужно по-другому)
+        
+        // ДЛЯ MULTIPART ФОРМ - особенная обработка
         const isMultipart = form.enctype === 'multipart/form-data';
         
-        if (csrfToken && !formData.has('csrfmiddlewaretoken') && !isMultipart) {
+        console.log('🔐 CSRF Debug:');
+        console.log('   - Token from cookies:', csrfToken);
+        console.log('   - Is multipart:', isMultipart);
+        console.log('   - FormData has CSRF:', formData.has('csrfmiddlewaretoken'));
+        console.log('   - FormData keys:', Array.from(formData.keys()));
+        
+        if (csrfToken && !formData.has('csrfmiddlewaretoken')) {
+            // ДОБАВЛЯЕМ CSRF TOKEN В FORMDATA
             formData.append('csrfmiddlewaretoken', csrfToken);
-            console.log('🔐 Added CSRF token to form data');
+            console.log('🔐 Added CSRF token to FormData');
         }
         
         const options = {
@@ -633,7 +640,8 @@ function rebindComplexInteractions() {
         if (isMultipart) {
             // Для multipart - отправляем FormData как есть
             options.body = formData;
-            console.log('📎 Sending multipart form data with files');
+            // НЕ устанавливаем Content-Type - браузер сделает это сам с boundary
+            console.log('📎 Sending multipart form data with CSRF token');
         } else {
             // Для обычных форм - конвертируем в URL encoded
             options.headers = {
@@ -644,11 +652,8 @@ function rebindComplexInteractions() {
                 urlEncodedData.append(key, value);
             }
             options.body = urlEncodedData.toString();
-            console.log('📤 Sending URL encoded form data');
+            console.log('📤 Sending URL encoded form data with CSRF token');
         }
-        
-        console.log('🛡️ CSRF token in cookies:', csrfToken);
-        console.log('📋 Form data keys:', Array.from(formData.keys()));
         
         const response = await fetch(fixedUrl, options);
         
@@ -660,7 +665,12 @@ function rebindComplexInteractions() {
             document.getElementById('proxy-content').innerHTML = html;
             fixAllLinksInContent();
             rebindComplexInteractions();
-            console.log('✅ Form submitted successfully');
+            
+            if (response.status === 403) {
+                console.error('❌ CSRF Error - form was rejected');
+            } else {
+                console.log('✅ Form submitted successfully');
+            }
         }
     } catch (error) {
         console.error('❌ Form submission failed:', error);
