@@ -296,52 +296,46 @@ function fixSingleCookie(cookieHeader, req) {
   delete requestData.headers['accept-encoding'];
   delete requestData.headers['referer'];
 
-  if (req.headers['content-type']?.includes('multipart/form-data')) {
-    console.log('📤 Multipart form data detected');
-    console.log('📦 Request body type:', typeof req.body);
-    console.log('📦 Request body keys:', req.body ? Object.keys(req.body) : 'no body');
     
-    if (req.body && typeof req.body === 'object') {
-        // Проверяем наличие CSRF token в multipart данных
-        if (req.body.csrfmiddlewaretoken) {
-            console.log('🛡️ CSRF token in multipart request:', req.body.csrfmiddlewaretoken.substring(0, 10) + '...');
-        } else {
-            console.error('❌ CSRF token MISSING in multipart request!');
-            console.log('🔍 Available fields:', Object.keys(req.body));
-        }
-    }
-    
-    requestData.body = req.body;
-    requestData.hasBody = true;
-}
-
 // Обрабатываем разные типы body
-if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    if (req.headers['content-type']?.includes('multipart/form-data')) {
-        // Для FormData с файлами - передаем как есть
-        console.log('📤 Multipart form data detected');
-        requestData.body = req.body; // Express уже обработал multipart
-        requestData.hasBody = true;
-    } else if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-        // Для обычных форм - передаем как строку
-        if (req.body && typeof req.body === 'object') {
-            const formData = new URLSearchParams();
-            for (const [key, value] of Object.entries(req.body)) {
-                formData.append(key, value);
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        if (req.headers['content-type']?.includes('multipart/form-data')) {
+            console.log('📤 Multipart form data detected');
+            console.log('📦 Request body type:', typeof req.body);
+            console.log('📦 Request body keys:', req.body ? Object.keys(req.body) : 'no body');
+            
+            if (req.body && typeof req.body === 'object') {
+                // Проверяем наличие CSRF token в multipart данных
+                if (req.body.csrfmiddlewaretoken) {
+                    console.log('🛡️ CSRF token in multipart request:', req.body.csrfmiddlewaretoken.substring(0, 10) + '...');
+                } else {
+                    console.error('❌ CSRF token MISSING in multipart request!');
+                    console.log('🔍 Available fields:', Object.keys(req.body));
+                }
             }
-            requestData.body = formData.toString();
+            
+            requestData.body = req.body;
+            requestData.hasBody = true;
+        } else if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+            // Для обычных форм - передаем как строку
+            if (req.body && typeof req.body === 'object') {
+                const formData = new URLSearchParams();
+                for (const [key, value] of Object.entries(req.body)) {
+                    formData.append(key, value);
+                }
+                requestData.body = formData.toString();
+                requestData.hasBody = true;
+            } else {
+                requestData.body = req.body || '';
+                requestData.hasBody = !!req.body;
+            }
+        } else if (req.body) {
+            requestData.body = req.body;
             requestData.hasBody = true;
         } else {
-            requestData.body = req.body || '';
-            requestData.hasBody = !!req.body;
+            requestData.hasBody = false;
         }
-    } else if (req.body) {
-        requestData.body = req.body;
-        requestData.hasBody = true;
-    } else {
-        requestData.hasBody = false;
     }
-}
 
   const timeout = setTimeout(() => {
     console.log(`❌ Timeout for request ${requestId}`);
