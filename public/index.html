@@ -571,6 +571,9 @@ async function loadContent() {
         console.log('🚀 Initializing interceptors...');
         interceptInlineScripts();
         overrideExistingFunctions();
+        interceptGlobalUrls();
+        interceptForms();
+        interceptDynamicEvents()
         startDOMObserver();
         fixAllLinks();
         
