@@ -206,6 +206,19 @@ Element.prototype.setAttribute = function(name, value) {
     return originalSetAttribute.call(this, name, value);
 };
 
+
+
+// Функция для получения CSRF token из cookies
+function getCSRFTokenFromCookies() {
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrftoken') {
+            return value;
+        }
+    }
+    return null;
+}
 // ==================== ПЕРЕХВАТ INLINE СКРИПТОВ ====================
 
 function interceptInlineScripts() {
@@ -551,6 +564,98 @@ function overrideExistingFunctions() {
         initializeBootstrapComponents();
     }
     
+ 
+function fixUserAvatars() {
+    const avatars = document.querySelectorAll('img[src*="avatar"], .navbar img[src]');
+    avatars.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('/') && !src.startsWith('/proxy/') && !src.startsWith('/static/')) {
+            const fixedSrc = '/proxy' + src;
+            img.setAttribute('src', fixedSrc);
+        }
+    });
+}
+    
+function rebindComplexInteractions() {
+    
+    // Перехватываем все элементы с data-bs- атрибутами
+    const bsElements = document.querySelectorAll('[data-bs-toggle], [data-bs-target]');
+    bsElements.forEach(el => {
+        const toggle = el.getAttribute('data-bs-toggle');
+        const target = el.getAttribute('data-bs-target');
+        
+        if (toggle === 'collapse' && target) {
+            el.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetEl = document.querySelector(target);
+                if (targetEl) {
+                    targetEl.classList.toggle('show');
+                }
+            });
+        }
+    });
+
+    // Перехватываем все кнопки с dropdown
+    const dropdownButtons = document.querySelectorAll('.dropdown > .btn[data-bs-toggle="dropdown"]');
+    dropdownButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const menu = this.nextElementSibling;
+            if (menu && menu.classList.contains('dropdown-menu')) {
+                menu.classList.toggle('show');
+            }
+        });
+    });
+    // Исправляем аватары пользователей
+    fixUserAvatars();
+}
+
+    async function submitForm(form, action, method, formData) {
+    try {
+        const fixedUrl = fixUrl(action);
+        
+        // Получаем CSRF token из cookies
+        const csrfToken = getCSRFTokenFromCookies();
+        
+        // ДОБАВЛЯЕМ CSRF TOKEN В FORMDATA ЕСЛИ ЕГО ЕЩЕ НЕТ
+        if (csrfToken && !formData.has('csrfmiddlewaretoken')) {
+            formData.append('csrfmiddlewaretoken', csrfToken);
+        }
+        
+        const options = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            credentials: 'include'
+        };
+        
+        // Конвертируем FormData в URL encoded string
+        const urlEncodedData = new URLSearchParams();
+        for (const [key, value] of formData) {
+            urlEncodedData.append(key, value);
+        }
+        
+        options.body = urlEncodedData.toString();      
+        const response = await fetch(fixedUrl, options);
+        
+        if (response.redirected) {
+            loadSpecificUrl(response.url);
+        } else if (response.status === 200 || response.status === 302) {
+            const html = await response.text();
+            document.getElementById('proxy-content').innerHTML = html;
+            fixAllLinks();
+            rebindComplexInteractions();
+        } else {
+            const html = await response.text();
+            document.getElementById('proxy-content').innerHTML = html;
+            fixAllLinks();
+            rebindComplexInteractions();
+        }
+    } catch (error) {
+        showError(error);
+    }
+}
 function initializeBootstrapComponents() {    
     // 1. Инициализируем navbar toggler
     const navbarTogglers = document.querySelectorAll('.navbar-toggler');
@@ -621,53 +726,41 @@ function initializeBootstrapComponents() {
             submitForm(this, action, method, new FormData(this));
         });
     });
-}
-    
-function fixUserAvatars() {
-    const avatars = document.querySelectorAll('img[src*="avatar"], .navbar img[src]');
-    avatars.forEach(img => {
-        const src = img.getAttribute('src');
-        if (src && src.startsWith('/') && !src.startsWith('/proxy/') && !src.startsWith('/static/')) {
-            const fixedSrc = '/proxy' + src;
-            img.setAttribute('src', fixedSrc);
-        }
-    });
-}
-    
-function rebindComplexInteractions() {
-    
-    // Перехватываем все элементы с data-bs- атрибутами
-    const bsElements = document.querySelectorAll('[data-bs-toggle], [data-bs-target]');
-    bsElements.forEach(el => {
-        const toggle = el.getAttribute('data-bs-toggle');
-        const target = el.getAttribute('data-bs-target');
+
+        document.addEventListener('submit', function(e) {
+        const form = e.target;
+        const action = form.getAttribute('action');
         
-        if (toggle === 'collapse' && target) {
-            el.addEventListener('click', function(e) {
-                e.preventDefault();
-                const targetEl = document.querySelector(target);
-                if (targetEl) {
-                    targetEl.classList.toggle('show');
+        if (action && action.startsWith('/') && 
+            !action.startsWith('//') && 
+            !action.startsWith('/proxy/')) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const method = (form.getAttribute('method') || 'GET').toUpperCase();
+            
+            // ДОБАВЛЯЕМ CSRF TOKEN ЕСЛИ ЕГО НЕТ В ФОРМЕ
+            const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+            if (!csrfInput) {
+                const csrfToken = getCSRFTokenFromCookies();
+                if (csrfToken) {
+                    formData.append('csrfmiddlewaretoken', csrfToken);
+                    console.log('🔐 Added CSRF token to intercepted form');
                 }
-            });
+            }
+            
+            if (method === 'GET') {
+                const params = new URLSearchParams(formData);
+                const searchString = params.toString() ? '?' + params.toString() : '';
+                const fixedUrl = fixUrl(action + searchString);
+                loadSpecificUrl(fixedUrl);
+            } else {
+                submitForm(form, action, method, formData);
+            }
         }
     });
-
-    // Перехватываем все кнопки с dropdown
-    const dropdownButtons = document.querySelectorAll('.dropdown > .btn[data-bs-toggle="dropdown"]');
-    dropdownButtons.forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            const menu = this.nextElementSibling;
-            if (menu && menu.classList.contains('dropdown-menu')) {
-                menu.classList.toggle('show');
-            }
-        });
-    });
-    // Исправляем аватары пользователей
-    fixUserAvatars();
 }
-
+   
    // ==================== ОСНОВНАЯ ЛОГИКА ====================
 
 async function loadContent() {
