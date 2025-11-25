@@ -200,7 +200,13 @@ function fixCookiesForProxy(cookies, req) {
 function isBase64(str) {
     if (typeof str !== 'string') return false;
     try {
-        return btoa(atob(str)) === str;
+        // Для Node.js
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(str, 'base64').toString('base64') === str;
+        }
+        // Fallback для других сред
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        return base64Regex.test(str) && str.length % 4 === 0;
     } catch (err) {
         return false;
     }
@@ -368,6 +374,19 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
                     }
                 });
             }
+            let responseBody = message.body || '';
+            const responseHeaders = message.headers || {};
+            
+            // Функция для получения content type
+            function getContentType(headers) {
+                const contentType = headers['content-type'] || headers['Content-Type'] || '';
+                return contentType.toLowerCase();
+            }
+            
+            const contentType = getContentType(responseHeaders);
+            
+            console.log(`📄 Processing response with Content-Type: ${contentType}`);
+            
             // Проверяем бинарные данные
             if (contentType.includes('image/') || 
                 contentType.includes('application/octet-stream') ||
@@ -380,6 +399,7 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
                     try {
                         const buffer = Buffer.from(responseBody, 'base64');
                         responseBody = buffer;
+                        console.log(`🖼️ Decoded base64 to buffer, length: ${buffer.length}`);
                     } catch (error) {
                         console.error('❌ Error decoding base64:', error);
                     }
@@ -387,9 +407,7 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
             } else if (contentType.includes('text/html') || contentType.includes('text/css')) {
                 console.log(`🔧 Fixing URLs in ${contentType}`);
                 responseBody = fixHtmlContent(responseBody, targetPath);
-            }
-
-            
+            }   
             res.status(message.status || 200).send(responseBody);
         }
     } catch (error) {
