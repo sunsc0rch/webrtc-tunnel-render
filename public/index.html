@@ -108,7 +108,7 @@ const originalXHRSend = XMLHttpRequest.prototype.send;
 // Функция для проверки статических файлов
 function isStaticAsset(url) {
     const staticPatterns = [
-        '/static/', '/media/', '/admin/', 
+        '/static/', '/media/', '/admin/', '/health/', '/status/', '/test-query/'
         '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
         '.woff', '.woff2', '.ttf', '.eot', '.map'
     ];
@@ -140,7 +140,11 @@ window.fetch = function(...args) {
     let url = args[0];
     
     if (typeof url === 'string') {
-        args[0] = fixUrl(url);
+        // Проверяем системные маршруты перед фиксацией
+        const systemRoutes = ['/health', '/status', '/test-query'];
+        if (!systemRoutes.some(route => url.startsWith(route))) {
+            args[0] = fixUrl(url);
+        }
     }
     
     if (args[0] instanceof Request) {
