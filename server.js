@@ -196,7 +196,15 @@ function fixCookiesForProxy(cookies, req) {
     
     return cookies;
 }
-
+// Функция проверки base64
+function isBase64(str) {
+    if (typeof str !== 'string') return false;
+    try {
+        return btoa(atob(str)) === str;
+    } catch (err) {
+        return false;
+    }
+}
 // Функция для фиксации одной cookie
 function fixSingleCookie(cookieHeader, req) {
     if (!cookieHeader || typeof cookieHeader !== 'string') return cookieHeader;
@@ -360,14 +368,27 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
                     }
                 });
             }
-            
-            let responseBody = message.body || '';
-            const contentType = getContentType(message.headers);
-            
-            if (contentType.includes('text/html') || contentType.includes('text/css')) {
+            // Проверяем бинарные данные
+            if (contentType.includes('image/') || 
+                contentType.includes('application/octet-stream') ||
+                contentType.includes('font/')) {
+                
+                console.log(`🔧 Handling binary content: ${contentType}`);
+                
+                // Если body в base64, декодируем
+                if (typeof responseBody === 'string' && isBase64(responseBody)) {
+                    try {
+                        const buffer = Buffer.from(responseBody, 'base64');
+                        responseBody = buffer;
+                    } catch (error) {
+                        console.error('❌ Error decoding base64:', error);
+                    }
+                }
+            } else if (contentType.includes('text/html') || contentType.includes('text/css')) {
                 console.log(`🔧 Fixing URLs in ${contentType}`);
                 responseBody = fixHtmlContent(responseBody, targetPath);
             }
+
             
             res.status(message.status || 200).send(responseBody);
         }
