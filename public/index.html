@@ -108,7 +108,7 @@ const originalXHRSend = XMLHttpRequest.prototype.send;
 // Функция для проверки статических файлов
 function isStaticAsset(url) {
     const staticPatterns = [
-        '/static/', '/media/', '/admin/', '/health/', '/status/', '/test-query/'
+        '/static/', '/media/', '/admin/', '/health/', '/status/', '/test-query/',
         '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
         '.woff', '.woff2', '.ttf', '.eot', '.map'
     ];
