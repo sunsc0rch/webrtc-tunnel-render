@@ -616,43 +616,54 @@ function rebindComplexInteractions() {
         
         // Получаем CSRF token из cookies
         const csrfToken = getCSRFTokenFromCookies();
-        
         // ДОБАВЛЯЕМ CSRF TOKEN В FORMDATA ЕСЛИ ЕГО ЕЩЕ НЕТ
-        if (csrfToken && !formData.has('csrfmiddlewaretoken')) {
+        // Но только если это не multipart/form-data (для файлов нужно по-другому)
+        const isMultipart = form.enctype === 'multipart/form-data';
+        
+        if (csrfToken && !formData.has('csrfmiddlewaretoken') && !isMultipart) {
             formData.append('csrfmiddlewaretoken', csrfToken);
+            console.log('🔐 Added CSRF token to form data');
         }
         
         const options = {
             method: method,
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
             credentials: 'include'
         };
         
-        // Конвертируем FormData в URL encoded string
-        const urlEncodedData = new URLSearchParams();
-        for (const [key, value] of formData) {
-            urlEncodedData.append(key, value);
+        if (isMultipart) {
+            // Для multipart - отправляем FormData как есть
+            options.body = formData;
+            console.log('📎 Sending multipart form data with files');
+        } else {
+            // Для обычных форм - конвертируем в URL encoded
+            options.headers = {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            };
+            const urlEncodedData = new URLSearchParams();
+            for (const [key, value] of formData) {
+                urlEncodedData.append(key, value);
+            }
+            options.body = urlEncodedData.toString();
+            console.log('📤 Sending URL encoded form data');
         }
         
-        options.body = urlEncodedData.toString();      
+        console.log('🛡️ CSRF token in cookies:', csrfToken);
+        console.log('📋 Form data keys:', Array.from(formData.keys()));
+        
         const response = await fetch(fixedUrl, options);
         
         if (response.redirected) {
+            console.log('🔄 Redirect detected, loading new URL');
             loadSpecificUrl(response.url);
-        } else if (response.status === 200 || response.status === 302) {
-            const html = await response.text();
-            document.getElementById('proxy-content').innerHTML = html;
-            fixAllLinks();
-            rebindComplexInteractions();
         } else {
             const html = await response.text();
             document.getElementById('proxy-content').innerHTML = html;
-            fixAllLinks();
+            fixAllLinksInContent();
             rebindComplexInteractions();
+            console.log('✅ Form submitted successfully');
         }
     } catch (error) {
+        console.error('❌ Form submission failed:', error);
         showError(error);
     }
 }
