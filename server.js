@@ -238,7 +238,8 @@ function extractAuthTokens(headers) {
     ];
     
     authQueryParams.forEach(param => {
-        if (queryParams[param]) {
+        // Используем queryParams который передается как параметр
+        if (queryParams && queryParams[param]) {
             tokens[`query_${param}`] = queryParams[param];
             console.log(`🔑 Auth query parameter detected: ${param}`);
         }
