@@ -1,7 +1,7 @@
 Experimental webrtc proxy for tunneling traffic or sharing your local app(website,service etc) via any free simple hosting with js/html support
 
 
-Deploy this to your hosting with node.js or express.js(Render,glitch,keroku for example)
+Deploy this to your hosting with node.js or express.js(Render,glitch,heroku for example)
 
 On your node from where you want to share app:
 curl -fsSL https://nodejs.org/dist/v24.11.1/node-v24.11.1-linux-x64.tar.xz | sudo tar -xJ -C /usr/local --strip-components=1 && sudo ln -sf /usr/local/bin/node /usr/bin/node && sudo ln -sf /usr/local/bin/npm /usr/bin/npm
