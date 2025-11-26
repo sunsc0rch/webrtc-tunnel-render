@@ -170,7 +170,7 @@ function fixHtmlContent(html, currentPath = '') {
 }
 
 // Функция для извлечения и логирования токенов аутентификации
-function extractAuthTokens(headers) {
+function extractAuthTokens(headers, queryParams = {}) {
     const tokens = {};
     
     // JWT Tokens (разные варианты headers)
