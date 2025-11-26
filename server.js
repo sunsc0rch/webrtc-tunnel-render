@@ -474,7 +474,7 @@ function fixSingleCookie(cookieHeader, req) {
                     console.log('🔐 New auth tokens in response:');
                     logAuthSecurity(responseAuthTokens);
                 }
-            }
+            
                 Object.entries(message.headers).forEach(([key, value]) => {
                     if (key.toLowerCase() !== 'content-length') {
                         if (key.toLowerCase() === 'set-cookie') {
