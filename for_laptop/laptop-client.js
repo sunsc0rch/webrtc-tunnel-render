@@ -25,107 +25,105 @@ function extractCookies(headers, url) {
     if (headers['set-cookie']) {
         let setCookieHeaders = headers['set-cookie'];
         
-        // Если это массив - уже разбито, если строка - нужно разбить по запятым
+        // Если это массив - уже разбито, если строка - нужно разбить
         if (!Array.isArray(setCookieHeaders)) {
-            // Важно: разбиваем по запятой, но учитываем даты в Expires
             setCookieHeaders = splitSetCookieHeaders(setCookieHeaders);
         }
         
-        console.log(`🍪 Processing ${setCookieHeaders.length} Set-Cookie headers:`, setCookieHeaders);
+        console.log(`🍪 Processing ${setCookieHeaders.length} Set-Cookie headers`);
         
-        setCookieHeaders.forEach(cookieHeader => {
+        setCookieHeaders.forEach((cookieHeader, index) => {
             if (!cookieHeader || typeof cookieHeader !== 'string') return;
             
-            console.log(`🍪 Raw Set-Cookie: ${cookieHeader}`);
+            console.log(`🍪 [${index}] Raw Set-Cookie: ${cookieHeader}`);
             
-            // Извлекаем первую часть до точки с запятой - name=value
+            // Извлекаем name=value (все до первой точки с запятой)
             const firstSemicolon = cookieHeader.indexOf(';');
             const nameValuePart = firstSemicolon !== -1 
                 ? cookieHeader.substring(0, firstSemicolon).trim()
                 : cookieHeader.trim();
             
-            const [name, value] = nameValuePart.split('=');
+            const equalsIndex = nameValuePart.indexOf('=');
+            if (equalsIndex === -1) return;
+            
+            const name = nameValuePart.substring(0, equalsIndex).trim();
+            const value = nameValuePart.substring(equalsIndex + 1).trim();
             
             if (name && value) {
-                // Создаем объект cookie
-                const cookie = {
-                    name: name.trim(),
-                    value: value.trim(),
-                    header: cookieHeader,
-                    attributes: {}
-                };
-                
-                // Парсим атрибуты (все что после первого ;)
-                if (firstSemicolon !== -1) {
-                    const attributesPart = cookieHeader.substring(firstSemicolon + 1);
-                    const attributes = attributesPart.split(';').map(attr => attr.trim());
-                    
-                    attributes.forEach(attr => {
-                        if (!attr) return;
-                        const [attrName, attrValue] = attr.split('=');
-                        if (attrName) {
-                            cookie.attributes[attrName.toLowerCase().trim()] = attrValue ? attrValue.trim() : true;
-                        }
-                    });
-                }
-                
-                cookies.push(cookie);
-                
                 // Сохраняем в cookie jar
-                cookieJar.set(cookie.name, cookie.value);
-                console.log(`🍪 Saved cookie: ${cookie.name}=${cookie.value}`);
+                cookieJar.set(name, value);
+                console.log(`🍪 Saved cookie: ${name}=${value.substring(0, 10)}...`);
                 
                 // Особое логирование для важных cookies
-                if (cookie.name === 'sessionid') {
-                    console.log('🎉 SESSION COOKIE SAVED! User should be logged in.');
-                } else if (cookie.name === 'csrftoken') {
-                    console.log('🛡️ CSRF token updated');
+                if (name === 'sessionid') {
+                    console.log('🎉 SESSION COOKIE SAVED!');
+                } else if (name === 'csrftoken') {
+                    console.log('🛡️ CSRF token saved');
                 }
+                
+                cookies.push({
+                    name: name,
+                    value: value,
+                    header: cookieHeader
+                });
             }
         });
     }
     
-    // Диагностика
-    console.log(`🍪 Total cookies processed: ${cookies.length}`);
-    console.log(`🍪 Cookie jar now has: ${cookieJar.size} cookies`);
-    console.log('🍪 Current cookie jar:', Array.from(cookieJar.entries()));
-    
     return cookies;
 }
-
 // Функция для правильного разбиения Set-Cookie headers
 function splitSetCookieHeaders(headerString) {
     if (!headerString) return [];
     
     const cookies = [];
-    let currentCookie = '';
-    let inQuotes = false;
+    const parts = headerString.split(',');
     
-    for (let i = 0; i < headerString.length; i++) {
-        const char = headerString[i];
+    for (let i = 0; i < parts.length; i++) {
+        let cookie = parts[i].trim();
         
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        }
-        
-        if (char === ',' && !inQuotes) {
-            // Нашли разделитель cookies (не внутри кавычек)
-            if (currentCookie.trim()) {
-                cookies.push(currentCookie.trim());
-                currentCookie = '';
-            }
+        // Если cookie начинается с атрибута (например, "HttpOnly"), присоединяем к предыдущей
+        if (i > 0 && (cookie.toLowerCase().startsWith('httponly') ||
+                       cookie.toLowerCase().startsWith('samesite') ||
+                       cookie.toLowerCase().startsWith('secure') ||
+                       cookie.toLowerCase().startsWith('max-age') ||
+                       cookie.toLowerCase().startsWith('expires') ||
+                       cookie.toLowerCase().startsWith('path') ||
+                       cookie.toLowerCase().startsWith('domain'))) {
+            cookies[cookies.length - 1] += ', ' + cookie;
         } else {
-            currentCookie += char;
+            cookies.push(cookie);
         }
-    }
-    
-    // Добавляем последнюю cookie
-    if (currentCookie.trim()) {
-        cookies.push(currentCookie.trim());
     }
     
     return cookies;
 }
+function emergencyCookieRecovery() {
+    console.log('🚨 EMERGENCY COOKIE RECOVERY');
+    
+    // Проверяем критические cookies
+    const hasSession = cookieJar.has('sessionid');
+    const hasCSRF = cookieJar.has('csrftoken');
+    
+    if (!hasSession && hasCSRF) {
+        console.error('❌ CRITICAL: Session cookie lost but CSRF exists!');
+        
+        // Попробуем восстановить из последних incoming cookies
+        if (lastIncomingCookies) {
+            const sessionMatch = lastIncomingCookies.match(/sessionid=([^;]+)/);
+            if (sessionMatch) {
+                cookieJar.set('sessionid', sessionMatch[1]);
+                console.log('🎉 EMERGENCY: Recovered sessionid from incoming cookies');
+            }
+        }
+    }
+    
+    console.log('🍪 Cookie jar after recovery:', Array.from(cookieJar.entries()));
+}
+
+// Добавьте переменную для хранения последних incoming cookies
+let lastIncomingCookies = '';
+
 // Функция для создания cookie header из cookie jar
 function createCookieHeader() {
     const cookies = [];
@@ -196,6 +194,7 @@ ws.on('message', async (data) => {
             
             // ДОБАВЛЯЕМ COOKIES ИЗ ВХОДЯЩЕГО ЗАПРОСА
             if (message.headers && message.headers.cookie) {
+	        lastIncomingCookies = message.headers.cookie;
                 // Объединяем с существующими cookies
                 if (headers['cookie']) {
                     headers['cookie'] += '; ' + message.headers.cookie;
@@ -204,52 +203,110 @@ ws.on('message', async (data) => {
                 }
                 console.log(`🍪 Added incoming cookies: ${message.headers.cookie}`);
             }
-            
+if (message.method === 'POST' && message.path.includes('/profile/edit/')) {
+    console.log('👤 Profile edit form detected');
+    console.log('📋 Request headers:', JSON.stringify(headers, null, 2));
+    console.log('📦 Has body:', message.hasBody);
+    console.log('🍪 Cookies being sent:', headers['cookie']);
+}            
             const fetchOptions = {
                 method: message.method,
                 headers: headers,
                 // Важно: следуем редиректам
                 redirect: 'manual'
             };
-            
-            // ОБРАБОТКА ТЕЛА ЗАПРОСА
-	if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
-    	if (message.body === 'FORM_DATA_PLACEHOLDER') {
-        	// Для FormData - передаем как есть
-        	fetchOptions.body = message.body;
-    	} else if (typeof message.body === 'string') {
-        	fetchOptions.body = message.body;
+// обработка тела запроса:
+if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
+    if (message.isBase64Multipart) {
+        // Для base64 encoded multipart данных
+        console.log('📎 Base64 multipart form data detected');
         
-	        // Автоматически определяем Content-Type
-	        if (message.body.includes('csrfmiddlewaretoken') ||
-	            message.body.includes('username') ||
-	            message.body.includes('password') ||
-	            message.body.includes('application/x-www-form-urlencoded')) {
-	            headers['content-type'] = 'application/x-www-form-urlencoded';
-	        }
-	    } else if (typeof message.body === 'object') {
-	        fetchOptions.body = JSON.stringify(message.body);
-	        headers['content-type'] = 'application/json';
-	    }
-	}
-            try {
-                console.log(`🚀 Fetching: ${fullUrl}`);
-                console.log(`📋 Headers:`, JSON.stringify(headers, null, 2));
-                
-                const response = await fetch(fullUrl, fetchOptions);
-                const body = await response.text();
-                
-                console.log(`✅ Response status: ${response.status}, length: ${body.length}`);
-                
+        // Декодируем из base64 обратно в buffer
+        const buffer = Buffer.from(message.body, 'base64');
+        console.log('📦 Decoded buffer length:', buffer.length);
+        
+        fetchOptions.body = buffer;
+        
+        // Восстанавливаем оригинальный content-type
+        if (message.originalContentType) {
+            headers['content-type'] = message.originalContentType;
+        } else if (message.headers && message.headers['content-type']) {
+            headers['content-type'] = message.headers['content-type'];
+        }
+        
+    } else if (message.isRawMultipart) {
+        // Для raw multipart данных - передаем как строку с правильным content-type
+        console.log('📎 Raw multipart form data detected');
+        fetchOptions.body = message.body;
+        
+        // Сохраняем оригинальный content-type с boundary
+        if (message.headers && message.headers['content-type']) {
+            headers['content-type'] = message.headers['content-type'];
+        }
+        console.log('📦 Raw multipart body length:', message.body.length);
+        
+    } else if (typeof message.body === 'string') {
+        fetchOptions.body = message.body;
+        
+        // Автоматически определяем Content-Type
+        if (message.body.includes('csrfmiddlewaretoken') ||
+            message.body.includes('username') ||
+            message.body.includes('password') ||
+            message.body.includes('application/x-www-form-urlencoded')) {
+            headers['content-type'] = 'application/x-www-form-urlencoded';
+        }
+        
+    } else if (typeof message.body === 'object') {
+        // Для обычных объектов
+        fetchOptions.body = JSON.stringify(message.body);
+        headers['content-type'] = 'application/json';
+    }
+}
+
+try {
+    const response = await fetch(fullUrl, fetchOptions);
+    
+    // ДИАГНОСТИКА: определяем тип контента
+    const contentType = response.headers.get('content-type') || '';
+
+    let body;
+
+    // ПРАВИЛЬНОЕ ПОЛУЧЕНИЕ ТЕЛА ОТВЕТА В ЗАВИСИМОСТИ ОТ ТИПА
+    if (contentType.includes('image/') || 
+        contentType.includes('application/octet-stream') ||
+        contentType.includes('font/') ||
+        contentType.includes('binary')) {
+        
+        // ДЛЯ КАРТИНОК И БИНАРНЫХ ДАННЫХ - используем buffer и base64
+        const buffer = await response.buffer();
+        body = buffer.toString('base64');
+        
+    } else if (contentType.includes('text/html') || 
+               contentType.includes('text/plain') ||
+               contentType.includes('text/css') ||
+               contentType.includes('application/json')) {
+        
+        // ДЛЯ ТЕКСТОВЫХ ДАННЫХ - используем text() или json()
+        if (contentType.includes('application/json')) {
+            body = await response.json();
+        } else {
+            body = await response.text();
+        }
+        
+    } else {
+        // ПО УМОЛЧАНИЮ - как текст
+        body = await response.text();
+    }
+    
                 // СОБИРАЕМ ВСЕ HEADERS ОТВЕТА
                 const responseHeaders = {};
                 response.headers.forEach((value, key) => {
                     responseHeaders[key] = value;
                 });
-                
+
                 // ИЗВЛЕКАЕМ И СОХРАНЯЕМ COOKIES ИЗ ОТВЕТА
                 const cookies = extractCookies(responseHeaders, fullUrl);
-                
+
                 // ПОДГОТАВЛИВАЕМ ОТВЕТ ДЛЯ ОТПРАВКИ
                 const responseMessage = {
                     type: 'http-response',
@@ -258,19 +315,19 @@ ws.on('message', async (data) => {
                     headers: responseHeaders,
                     body: body
                 };
-                
+
                 // ДОБАВЛЯЕМ COOKIES В ОТВЕТ ДЛЯ СЕРВЕРА
                 if (cookies.length > 0) {
                     responseMessage.cookies = cookies;
                 }
-                
+
                 ws.send(JSON.stringify(responseMessage));
-                
+
                 // ЛОГИРУЕМ COOKIES
                 if (cookies.length > 0) {
                     console.log(`🍪 Received ${cookies.length} cookies from response`);
                 }
-                
+
             } catch (error) {
                 console.error('❌ Fetch error:', error);
                 ws.send(JSON.stringify({
