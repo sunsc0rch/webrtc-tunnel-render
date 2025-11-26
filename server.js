@@ -12,7 +12,31 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-app.use(cors());
+app.use(cors({
+    origin: true, // Разрешаем все origins (можно указать конкретные)
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'X-Requested-With',
+        'X-API-Key',
+        'X-Auth-Token',
+        'X-Access-Token',
+        'X-User-Token',
+        'API-Key',
+        'Access-Token',
+        'Accept',
+        'Origin'
+    ],
+    exposedHeaders: [
+        'Authorization',
+        'X-API-Key',
+        'X-Auth-Token'
+    ]
+}));
+// Обработка preflight OPTIONS запросов
+app.options('/proxy/*', cors());
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
