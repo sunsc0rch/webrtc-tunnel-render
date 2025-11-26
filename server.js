@@ -434,34 +434,49 @@ function fixSingleCookie(cookieHeader, req) {
     };
 
     // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
-    if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
-        console.log('📤 Multipart form data detected (raw mode)');
+if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
+    console.log('📤 Multipart form data detected (base64 mode)');
+    
+    const chunks = [];
+    
+    req.on('data', chunk => {
+        chunks.push(chunk);
+    });
+    
+    req.on('end', () => {
+        const rawBuffer = Buffer.concat(chunks);
+        console.log('📦 Raw multipart buffer diagnostics:');
+        console.log('   - Buffer length:', rawBuffer.length);
+        console.log('   - Is binary:', !rawBuffer.toString('utf8').includes('csrfmiddlewaretoken'));
+        console.log('   - Contains image data:', rawBuffer.includes(Buffer.from('image/')));
         
-        let rawBody = '';
+        // Конвертируем в base64 для безопасной передачи через WebSocket
+        const base64Body = rawBuffer.toString('base64');
+        console.log('   - Base64 length:', base64Body.length);
         
-        req.on('data', chunk => {
-            rawBody += chunk.toString('binary'); // Используем binary для сохранения boundary
-        });
+        // Проверяем наличие CSRF token
+        if (rawBuffer.includes(Buffer.from('csrfmiddlewaretoken'))) {
+            console.log('🛡️ CSRF token found in multipart body');
+        }
         
-        req.on('end', () => {
-            console.log('📦 Raw multipart body length:', rawBody.length);
-            
-            // Проверяем наличие CSRF token в raw body
-            if (rawBody.includes('csrfmiddlewaretoken')) {
-                console.log('🛡️ CSRF token found in raw multipart body');
-            } else {
-                console.error('❌ CSRF token NOT found in raw multipart body');
-            }
-            
-            // Отправляем запрос с raw body
-            handleRequest(rawBody);
-        });
+        requestData.body = base64Body;
+        requestData.hasBody = true;
+        requestData.isBase64Multipart = true;
+        requestData.originalContentType = req.headers['content-type'];
         
-        req.on('error', (error) => {
-            console.error('❌ Error reading multipart body:', error);
+        try {
+            laptopWs.send(JSON.stringify(requestData));
+        } catch (error) {
             clearTimeout(timeout);
-            res.status(500).send('Error reading request body');
-        });
+            res.status(502).send('WebSocket error');
+        }
+    });
+    
+    req.on('error', (error) => {
+        console.error('❌ Error reading multipart body:', error);
+        clearTimeout(timeout);
+        res.status(500).send('Error reading request body');
+    });
         
     } else {
         // Для всех других запросов - обычная обработка
