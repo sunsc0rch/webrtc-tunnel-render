@@ -263,6 +263,46 @@ if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method))
     }
 }
 
+// В обработке сообщений, перед fetch:
+console.log('🔐 Request Auth Analysis:');
+if (message.authInfo) {
+    console.log('   - Auth methods:', message.authInfo.methods);
+    console.log('   - Has auth:', message.authInfo.hasAuth);
+}
+
+// Анализ headers на наличие токенов
+const authHeaders = {};
+if (message.headers) {
+    Object.entries(message.headers).forEach(([key, value]) => {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey.includes('auth') || 
+            lowerKey.includes('token') || 
+            lowerKey.includes('api-key') ||
+            lowerKey.includes('authorization')) {
+            authHeaders[key] = value;
+        }
+    });
+}
+
+if (Object.keys(authHeaders).length > 0) {
+    console.log('🔑 Auth headers being sent:');
+    Object.entries(authHeaders).forEach(([key, value]) => {
+        // Маскируем чувствительные данные в логах
+        let logValue = value;
+        if (key.toLowerCase().includes('authorization') && typeof value === 'string') {
+            if (value.startsWith('Bearer ') || value.startsWith('Token ')) {
+                const prefix = value.split(' ')[0];
+                const token = value.split(' ')[1];
+                logValue = `${prefix} ${token.length > 8 ? token.substring(0, 4) + '...' + token.substring(token.length - 4) : '***'}`;
+            }
+        }
+        if (key.toLowerCase().includes('api-key') && typeof value === 'string') {
+            logValue = value.length > 8 ? value.substring(0, 4) + '...' + value.substring(value.length - 4) : '***';
+        }
+        console.log(`   ${key}: ${logValue}`);
+    });
+}
+
 try {
     const response = await fetch(fullUrl, fetchOptions);
     
