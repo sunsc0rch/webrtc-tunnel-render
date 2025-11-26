@@ -231,6 +231,19 @@ function extractAuthTokens(headers) {
         }
     });
     
+    // Query Parameter Authentication
+    const authQueryParams = [
+        'token', 'api_key', 'apikey', 'access_token',
+        'auth_token', 'key', 'secret'
+    ];
+    
+    authQueryParams.forEach(param => {
+        if (queryParams[param]) {
+            tokens[`query_${param}`] = queryParams[param];
+            console.log(`🔑 Auth query parameter detected: ${param}`);
+        }
+    });
+    
     return tokens;
 }
 
@@ -303,7 +316,7 @@ app.all('/proxy/*', async (req, res) => {
   });
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
-    const authTokens = extractAuthTokens(req.headers);
+    const authTokens = extractAuthTokens(req.headers, req.query);
     logAuthSecurity(authTokens);
   
   if (laptops.size === 0) {
@@ -456,6 +469,12 @@ function fixSingleCookie(cookieHeader, req) {
             
             // Передаем headers
             if (message.headers) {
+                const responseAuthTokens = extractAuthTokens(message.headers);
+                if (Object.keys(responseAuthTokens).length > 0) {
+                    console.log('🔐 New auth tokens in response:');
+                    logAuthSecurity(responseAuthTokens);
+                }
+            }
                 Object.entries(message.headers).forEach(([key, value]) => {
                     if (key.toLowerCase() !== 'content-length') {
                         if (key.toLowerCase() === 'set-cookie') {
