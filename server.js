@@ -296,63 +296,6 @@ function fixSingleCookie(cookieHeader, req) {
   delete requestData.headers['accept-encoding'];
   delete requestData.headers['referer'];
 
-    
-// Обрабатываем разные типы body
-// ОБРАБОТКА ТЕЛА ЗАПРОСА
-if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    if (req.headers['content-type']?.includes('multipart/form-data')) {
-        console.log('📤 Multipart form data detected (raw mode)');
-        
-        // Для multipart - передаем raw body как есть
-        // Это сработает если Express еще не парсил body
-        let rawBody = '';
-        req.on('data', chunk => {
-            rawBody += chunk.toString();
-        });
-        
-        req.on('end', () => {
-            requestData.body = rawBody;
-            requestData.hasBody = true;
-            requestData.isRawMultipart = true;
-            
-            console.log('📦 Raw multipart body length:', rawBody.length);
-            
-            // Проверяем наличие CSRF token в raw body
-            if (rawBody.includes('csrfmiddlewaretoken')) {
-                console.log('🛡️ CSRF token found in raw multipart body');
-            } else {
-                console.error('❌ CSRF token NOT found in raw multipart body');
-            }
-            
-            // Отправляем запрос после получения всего body
-            laptopWs.send(JSON.stringify(requestData));
-        });
-        
-        // Не продолжаем дальше - ждем end события
-        return;
-      
-        } else if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-            // Для обычных форм - передаем как строку
-            if (req.body && typeof req.body === 'object') {
-                const formData = new URLSearchParams();
-                for (const [key, value] of Object.entries(req.body)) {
-                    formData.append(key, value);
-                }
-                requestData.body = formData.toString();
-                requestData.hasBody = true;
-            } else {
-                requestData.body = req.body || '';
-                requestData.hasBody = !!req.body;
-            }
-        } else if (req.body) {
-            requestData.body = req.body;
-            requestData.hasBody = true;
-        } else {
-            requestData.hasBody = false;
-        }
-    laptopWs.send(JSON.stringify(requestData));
-    }
-
   const timeout = setTimeout(() => {
     console.log(`❌ Timeout for request ${requestId}`);
     res.status(504).send('Request timeout');
@@ -452,13 +395,78 @@ if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
 
   laptopWs.on('message', responseHandler);
   
-  try {
-    laptopWs.send(JSON.stringify(requestData));
-  } catch (error) {
-    clearTimeout(timeout);
-    laptopWs.removeListener('message', responseHandler);
-    res.status(502).send('WebSocket error');
-  }
+    // ОБРАБОТКА ТЕЛА ЗАПРОСА - ПРАВИЛЬНАЯ ИНТЕГРАЦИЯ
+    const handleRequest = (body = null) => {
+        if (body !== null) {
+            // Если есть raw body (для multipart)
+            requestData.body = body;
+            requestData.hasBody = true;
+            requestData.isRawMultipart = true;
+        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+            // Для обычных запросов
+            if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+                if (req.body && typeof req.body === 'object') {
+                    const formData = new URLSearchParams();
+                    for (const [key, value] of Object.entries(req.body)) {
+                        formData.append(key, value);
+                    }
+                    requestData.body = formData.toString();
+                    requestData.hasBody = true;
+                } else {
+                    requestData.body = req.body || '';
+                    requestData.hasBody = !!req.body;
+                }
+            } else if (req.body) {
+                requestData.body = req.body;
+                requestData.hasBody = true;
+            } else {
+                requestData.hasBody = false;
+            }
+        }
+
+        try {
+            laptopWs.send(JSON.stringify(requestData));
+        } catch (error) {
+            clearTimeout(timeout);
+            laptopWs.removeListener('message', responseHandler);
+            res.status(502).send('WebSocket error');
+        }
+    };
+
+    // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
+    if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
+        console.log('📤 Multipart form data detected (raw mode)');
+        
+        let rawBody = '';
+        
+        req.on('data', chunk => {
+            rawBody += chunk.toString('binary'); // Используем binary для сохранения boundary
+        });
+        
+        req.on('end', () => {
+            console.log('📦 Raw multipart body length:', rawBody.length);
+            
+            // Проверяем наличие CSRF token в raw body
+            if (rawBody.includes('csrfmiddlewaretoken')) {
+                console.log('🛡️ CSRF token found in raw multipart body');
+            } else {
+                console.error('❌ CSRF token NOT found in raw multipart body');
+            }
+            
+            // Отправляем запрос с raw body
+            handleRequest(rawBody);
+        });
+        
+        req.on('error', (error) => {
+            console.error('❌ Error reading multipart body:', error);
+            clearTimeout(timeout);
+            res.status(500).send('Error reading request body');
+        });
+        
+    } else {
+        // Для всех других запросов - обычная обработка
+        handleRequest();
+    }
 });
 
 // WebSocket соединения
