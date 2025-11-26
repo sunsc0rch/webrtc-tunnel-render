@@ -145,8 +145,6 @@ function fixHtmlContent(html, currentPath = '') {
   return fixedHtml;
 }
 
-// В server.js, добавьте эти функции перед основным прокси-маршрутом:
-
 // Функция для извлечения и логирования токенов аутентификации
 function extractAuthTokens(headers) {
     const tokens = {};
