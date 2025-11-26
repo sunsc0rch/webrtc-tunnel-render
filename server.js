@@ -298,24 +298,39 @@ function fixSingleCookie(cookieHeader, req) {
 
     
 // Обрабатываем разные типы body
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-        if (req.headers['content-type']?.includes('multipart/form-data')) {
-            console.log('📤 Multipart form data detected');
-            console.log('📦 Request body type:', typeof req.body);
-            console.log('📦 Request body keys:', req.body ? Object.keys(req.body) : 'no body');
+// ОБРАБОТКА ТЕЛА ЗАПРОСА
+if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+        console.log('📤 Multipart form data detected (raw mode)');
+        
+        // Для multipart - передаем raw body как есть
+        // Это сработает если Express еще не парсил body
+        let rawBody = '';
+        req.on('data', chunk => {
+            rawBody += chunk.toString();
+        });
+        
+        req.on('end', () => {
+            requestData.body = rawBody;
+            requestData.hasBody = true;
+            requestData.isRawMultipart = true;
             
-            if (req.body && typeof req.body === 'object') {
-                // Проверяем наличие CSRF token в multipart данных
-                if (req.body.csrfmiddlewaretoken) {
-                    console.log('🛡️ CSRF token in multipart request:', req.body.csrfmiddlewaretoken.substring(0, 10) + '...');
-                } else {
-                    console.error('❌ CSRF token MISSING in multipart request!');
-                    console.log('🔍 Available fields:', Object.keys(req.body));
-                }
+            console.log('📦 Raw multipart body length:', rawBody.length);
+            
+            // Проверяем наличие CSRF token в raw body
+            if (rawBody.includes('csrfmiddlewaretoken')) {
+                console.log('🛡️ CSRF token found in raw multipart body');
+            } else {
+                console.error('❌ CSRF token NOT found in raw multipart body');
             }
             
-            requestData.body = req.body;
-            requestData.hasBody = true;
+            // Отправляем запрос после получения всего body
+            laptopWs.send(JSON.stringify(requestData));
+        });
+        
+        // Не продолжаем дальше - ждем end события
+        return;
+      
         } else if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
             // Для обычных форм - передаем как строку
             if (req.body && typeof req.body === 'object') {
@@ -335,6 +350,7 @@ function fixSingleCookie(cookieHeader, req) {
         } else {
             requestData.hasBody = false;
         }
+    laptopWs.send(JSON.stringify(requestData));
     }
 
   const timeout = setTimeout(() => {
