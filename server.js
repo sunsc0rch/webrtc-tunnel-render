@@ -145,6 +145,119 @@ function fixHtmlContent(html, currentPath = '') {
   return fixedHtml;
 }
 
+// В server.js, добавьте эти функции перед основным прокси-маршрутом:
+
+// Функция для извлечения и логирования токенов аутентификации
+function extractAuthTokens(headers) {
+    const tokens = {};
+    
+    // JWT Tokens (разные варианты headers)
+    if (headers.authorization) {
+        const authHeader = headers.authorization;
+        if (authHeader.startsWith('Bearer ')) {
+            tokens.jwt = authHeader.substring(7);
+            console.log('🔑 JWT Bearer token detected');
+        } else if (authHeader.startsWith('Token ')) {
+            tokens.jwt = authHeader.substring(6);
+            console.log('🔑 JWT Token detected');
+        }
+    }
+    
+    // API Keys (разные варианты)
+    if (headers['x-api-key']) {
+        tokens.apiKey = headers['x-api-key'];
+        console.log('🔑 API Key detected (X-API-Key)');
+    }
+    if (headers['api-key']) {
+        tokens.apiKey = headers['api-key'];
+        console.log('🔑 API Key detected (API-Key)');
+    }
+    if (headers.authorization && headers.authorization.startsWith('ApiKey ')) {
+        tokens.apiKey = headers.authorization.substring(7);
+        console.log('🔑 API Key detected (ApiKey)');
+    }
+    
+    // OAuth Tokens
+    if (headers['x-oauth-token']) {
+        tokens.oauth = headers['x-oauth-token'];
+        console.log('🔑 OAuth token detected');
+    }
+    
+    // Session Cookies (уже обрабатываются, но логируем)
+    if (headers.cookie) {
+        const cookies = headers.cookie.split(';');
+        const sessionCookies = cookies.filter(cookie => 
+            cookie.trim().startsWith('sessionid') || 
+            cookie.trim().startsWith('auth_token') ||
+            cookie.trim().startsWith('access_token')
+        );
+        if (sessionCookies.length > 0) {
+            console.log('🍪 Session/auth cookies detected:', sessionCookies.length);
+        }
+    }
+    
+    // Custom Auth Headers
+    const customAuthHeaders = [
+        'x-auth-token', 'x-access-token', 'x-user-token',
+        'authorization-token', 'access-token'
+    ];
+    
+    customAuthHeaders.forEach(header => {
+        if (headers[header]) {
+            tokens[header] = headers[header];
+            console.log(`🔑 Custom auth header detected: ${header}`);
+        }
+    });
+    
+    return tokens;
+}
+
+// Функция для проверки безопасности токенов (логирование)
+function logAuthSecurity(tokens) {
+    if (tokens.jwt) {
+        console.log('🛡️ JWT Token Security:');
+        // Базовый анализ JWT (без раскодирования)
+        const parts = tokens.jwt.split('.');
+        if (parts.length === 3) {
+            console.log('   - Valid JWT structure (3 parts)');
+            console.log('   - Header length:', parts[0].length);
+            console.log('   - Payload length:', parts[1].length);
+            console.log('   - Signature length:', parts[2].length);
+        }
+    }
+    
+    if (tokens.apiKey) {
+        console.log('🛡️ API Key Security:');
+        console.log('   - Key length:', tokens.apiKey.length);
+        // Маскируем ключ для безопасности логов
+        const maskedKey = tokens.apiKey.length > 8 
+            ? tokens.apiKey.substring(0, 4) + '...' + tokens.apiKey.substring(tokens.apiKey.length - 4)
+            : '***';
+        console.log('   - Masked key:', maskedKey);
+    }
+    
+    if (Object.keys(tokens).length > 0) {
+        console.log(`🎯 Total auth methods detected: ${Object.keys(tokens).length}`);
+    }
+}
+
+// Функция для передачи токенов между запросами (если нужно)
+const authTokenStore = new Map();
+
+function storeAuthTokens(clientId, tokens) {
+    if (Object.keys(tokens).length > 0) {
+        authTokenStore.set(clientId, {
+            tokens,
+            lastUpdated: new Date()
+        });
+        console.log(`💾 Stored auth tokens for client: ${clientId}`);
+    }
+}
+
+function getStoredAuthTokens(clientId) {
+    return authTokenStore.get(clientId);
+}
+
 // Функция для определения типа контента
 function getContentType(headers) {
   const contentType = headers['content-type'] || headers['Content-Type'];
@@ -166,7 +279,11 @@ app.all('/proxy/*', async (req, res) => {
     'content-type': req.headers['content-type'],
     'user-agent': req.headers['user-agent']
   });
-
+      // АНАЛИЗ АУТЕНТИФИКАЦИИ
+    console.log('🔐 AUTHENTICATION ANALYSIS:');
+    const authTokens = extractAuthTokens(req.headers);
+    logAuthSecurity(authTokens);
+  
   if (laptops.size === 0) {
     return res.status(503).send(`
       <!DOCTYPE html>
@@ -278,7 +395,11 @@ function fixSingleCookie(cookieHeader, req) {
       'accept': '*/*',
       'connection': 'close'
     },
-    query: req.query 
+    query: req.query, 
+    authInfo: {
+    methods: Object.keys(authTokens),
+    hasAuth: Object.keys(authTokens).length > 0
+        }
   };
 
   // Логируем что отправляем
