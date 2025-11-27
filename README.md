@@ -35,7 +35,7 @@ copy for_laptop/laptop-client.js to ~/laptop-webrtc
 
 npm install
 
-LOCAL_APP_URL=http://localhost:8100 # your local app on external node that you want to share
+LOCAL_APP_URL=http://localhost:8100 # your local app on your laptop/pc that you want to share
 
 Change it in laptop-client.js
 
