@@ -31,7 +31,7 @@ cd ~/laptop-webrtc
 EOF
 
 3.
-copy laptop-client.js to ~/laptop-webrtc
+copy for_laptop/laptop-client.js to ~/laptop-webrtc
 
 npm install
 
