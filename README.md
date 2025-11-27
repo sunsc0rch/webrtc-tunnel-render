@@ -4,8 +4,11 @@ Experimental webrtc proxy for tunneling traffic or sharing your local app(websit
 Deploy this to your hosting with node.js or express.js(Render,glitch,heroku for example)
 
 On your node from where you want to share app:
+1.
+
 curl -fsSL https://nodejs.org/dist/v24.11.1/node-v24.11.1-linux-x64.tar.xz | sudo tar -xJ -C /usr/local --strip-components=1 && sudo ln -sf /usr/local/bin/node /usr/bin/node && sudo ln -sf /usr/local/bin/npm /usr/bin/npm
 
+2.
 mkdir ~/laptop-webrtc
 
 cd ~/laptop-webrtc
@@ -26,6 +29,7 @@ cd ~/laptop-webrtc
 }
 EOF
 
+3.
 copy laptop-client.js to ~/laptop-webrtc
 
 npm install
