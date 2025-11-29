@@ -431,7 +431,8 @@ function fixSingleCookie(cookieHeader, req) {
     headers: {
       ...req.headers,
       'accept': '*/*',
-      'connection': 'close'
+      'connection': 'close',
+      'x-requested-with': req.headers['x-requested-with'] || ''
     },
     query: req.query, 
     authInfo: {
