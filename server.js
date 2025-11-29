@@ -317,6 +317,12 @@ app.all('/proxy/*', async (req, res) => {
     'content-type': req.headers['content-type'],
     'user-agent': req.headers['user-agent']
   });
+    // ЛОГИРУЕМ ТЕЛО ЕСЛИ ОНО ЕСТЬ
+if (req.body && typeof req.body === 'string') {
+    console.log('   Body preview (first 200 chars):', req.body.substring(0, 200));
+} else if (req.body && typeof req.body === 'object') {
+    console.log('   Body object:', JSON.stringify(req.body, null, 2).substring(0, 500));
+}
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
     const authTokens = extractAuthTokens(req.headers, req.query);
@@ -432,7 +438,7 @@ function fixSingleCookie(cookieHeader, req) {
       ...req.headers,
       'accept': '*/*',
       'connection': 'close',
-      'x-requested-with': req.headers['x-requested-with'] || ''
+      'x-requested-with': req.headers['X-Requested-With'] || ''
     },
     query: req.query, 
     authInfo: {
@@ -636,15 +642,23 @@ const handleRequest = (body = null) => {
 // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
 if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
     console.log('📤 Multipart form data detected (base64 mode)');
-    
+    console.log('   Content-Type:', req.headers['content-type']);
     const chunks = [];
+    let totalSize = 0;
     
     req.on('data', chunk => {
         chunks.push(chunk);
+        totalSize += chunk.length;
+        console.log(`   Received chunk: ${chunk.length} bytes, total: ${totalSize}`);
     });
     
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
+         // АНАЛИЗИРУЕМ СОДЕРЖИМОЕ
+        const bufferString = rawBuffer.toString('utf8');
+        console.log('   Contains csrfmiddlewaretoken:', bufferString.includes('csrfmiddlewaretoken'));
+        console.log('   Contains text=', bufferString.includes('text='));
+        console.log('   First 500 chars:', bufferString.substring(0, 500));
         
         // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
         const bufferString = rawBuffer.toString('utf8');
