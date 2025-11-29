@@ -310,11 +310,13 @@ app.all('/proxy/*', async (req, res) => {
   console.log('🔧 Method:', req.method);
   console.log('📍 Path:', targetPath);
   console.log('❓ Query params:', req.query);
+  console.log('   - Has body in request:', !!req.body);
   console.log('📋 Headers:', {
     host: req.headers.host,
     'content-type': req.headers['content-type'],
     'user-agent': req.headers['user-agent']
   });
+    const preservedMethod = req.method;
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
     const authTokens = extractAuthTokens(req.headers, req.query);
@@ -424,7 +426,7 @@ function fixSingleCookie(cookieHeader, req) {
   const requestData = {
     type: 'http-request',
     id: requestId,
-    method: req.method,
+    method: req.preservedMethod,
     path: '/' + targetPath,
     headers: {
       ...req.headers,
@@ -561,11 +563,12 @@ function fixSingleCookie(cookieHeader, req) {
     // ОБРАБОТКА ТЕЛА ЗАПРОСА - ПРАВИЛЬНАЯ ИНТЕГРАЦИЯ
     const handleRequest = (body = null) => {
         if (body !== null) {
+            requestData.method = preservedMethod;
             // Если есть raw body (для multipart)
             requestData.body = body;
             requestData.hasBody = true;
             requestData.isRawMultipart = true;
-        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.preservedMethod)) {
             // Для обычных запросов
             if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
                 if (req.body && typeof req.body === 'object') {
@@ -621,7 +624,7 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
         if (rawBuffer.includes(Buffer.from('csrfmiddlewaretoken'))) {
             console.log('🛡️ CSRF token found in multipart body');
         }
-        
+        requestData.method = 'POST';
         requestData.body = base64Body;
         requestData.hasBody = true;
         requestData.isBase64Multipart = true;
