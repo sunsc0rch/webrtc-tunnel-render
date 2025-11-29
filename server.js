@@ -633,7 +633,7 @@ const handleRequest = (body = null) => {
         res.status(502).send('WebSocket error');
     }
 };
-    // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
+// ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
 if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
     console.log('📤 Multipart form data detected (base64 mode)');
     
@@ -645,24 +645,31 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
-        console.log('📦 Raw multipart buffer diagnostics:');
-        console.log('   - Buffer length:', rawBuffer.length);
-        console.log('   - Is binary:', !rawBuffer.toString('utf8').includes('csrfmiddlewaretoken'));
-        console.log('   - Contains image data:', rawBuffer.includes(Buffer.from('image/')));
         
-        // Конвертируем в base64 для безопасной передачи через WebSocket
-        const base64Body = rawBuffer.toString('base64');
-        console.log('   - Base64 length:', base64Body.length);
-        
-        // Проверяем наличие CSRF token
-        if (rawBuffer.includes(Buffer.from('csrfmiddlewaretoken'))) {
-            console.log('🛡️ CSRF token found in multipart body');
+        // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
+        const bufferString = rawBuffer.toString('utf8');
+        if (bufferString.includes('csrfmiddlewaretoken') && 
+            bufferString.includes('text=') && 
+            !bufferString.includes('filename=')) {
+            
+            console.log('🔍 Simple form detected, sending as raw data');
+            
+            requestData.method = preservedMethod;
+            requestData.body = bufferString; // ← отправляем как строку
+            requestData.hasBody = true;
+            requestData.isRawMultipart = true;
+            
+        } else {
+            // Это настоящий multipart с файлами
+            console.log('🔍 Real multipart with files detected, using base64');
+            const base64Body = rawBuffer.toString('base64');
+            
+            requestData.method = preservedMethod;
+            requestData.body = base64Body;
+            requestData.hasBody = true;
+            requestData.isBase64Multipart = true;
+            requestData.originalContentType = req.headers['content-type'];
         }
-        requestData.method = 'POST';
-        requestData.body = base64Body;
-        requestData.hasBody = true;
-        requestData.isBase64Multipart = true;
-        requestData.originalContentType = req.headers['content-type'];
         
         try {
             laptopWs.send(JSON.stringify(requestData));
@@ -678,10 +685,11 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
         res.status(500).send('Error reading request body');
     });
         
-    } else {
-        // Для всех других запросов - обычная обработка
-        handleRequest();
-    }
+} else {
+    // Для всех других запросов - обычная обработка
+    handleRequest();
+}
+    
 });
 
 // WebSocket соединения
