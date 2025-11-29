@@ -571,45 +571,67 @@ if (targetPath.includes('/accounts/login/') && preservedMethod === 'POST') {
 
   laptopWs.on('message', responseHandler);
   
-    // ОБРАБОТКА ТЕЛА ЗАПРОСА - ПРАВИЛЬНАЯ ИНТЕГРАЦИЯ
-    const handleRequest = (body = null) => {
-        if (body !== null) {
-            requestData.method = preservedMethod;
-            // Если есть raw body (для multipart)
-            requestData.body = body;
-            requestData.hasBody = true;
-            requestData.isRawMultipart = true;
-        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(preservedMethod)) {
-            // Для обычных запросов
-            if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-                if (req.body && typeof req.body === 'object') {
-                    const formData = new URLSearchParams();
-                    for (const [key, value] of Object.entries(req.body)) {
-                        formData.append(key, value);
-                    }
-                    requestData.body = formData.toString();
-                    requestData.hasBody = true;
-                } else {
-                    requestData.body = req.body || '';
-                    requestData.hasBody = !!req.body;
+const handleRequest = (body = null) => {
+    // ВАЖНО: всегда устанавливаем метод
+    requestData.method = preservedMethod;
+    
+    if (body !== null) {
+        requestData.body = body;
+        requestData.hasBody = true;
+        requestData.isRawMultipart = true;
+    } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(preservedMethod)) {
+        // Для обычных запросов
+        if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+            console.log('🔍 FORM DATA DETECTED, processing as text');
+            
+            if (req.body && typeof req.body === 'object') {
+                const formData = new URLSearchParams();
+                for (const [key, value] of Object.entries(req.body)) {
+                    formData.append(key, value);
                 }
-            } else if (req.body) {
+                requestData.body = formData.toString();
+                requestData.hasBody = true;
+                
+                console.log('✅ Form data converted to string:', requestData.body.substring(0, 100) + '...');
+            } else if (typeof req.body === 'string') {
+                // Если тело уже строка - используем как есть
                 requestData.body = req.body;
                 requestData.hasBody = true;
+                console.log('✅ Using string body as-is');
             } else {
-                requestData.hasBody = false;
+                // Пробуем получить raw body как строку
+                requestData.body = req.body || '';
+                requestData.hasBody = !!req.body;
+                console.log('⚠️ Body type:', typeof req.body);
             }
+            
+            // ЛОГИРУЕМ CSRF ТОКЕН
+            if (requestData.body && requestData.body.includes('csrfmiddlewaretoken')) {
+                console.log('🛡️ CSRF token found in form data');
+            }
+        } else if (req.body) {
+            // Для других типов контента
+            requestData.body = req.body;
+            requestData.hasBody = true;
+            console.log('📦 Using body as:', typeof req.body);
+        } else {
+            requestData.hasBody = false;
+            console.log('📦 No body data');
         }
+    }
 
-        try {
-            laptopWs.send(JSON.stringify(requestData));
-        } catch (error) {
-            clearTimeout(timeout);
-            laptopWs.removeListener('message', responseHandler);
-            res.status(502).send('WebSocket error');
-        }
-    };
-
+    console.log('🔒 Final method to laptop:', requestData.method);
+    console.log('📦 Has body data:', requestData.hasBody);
+    console.log('📦 Body type:', typeof requestData.body);
+    
+    try {
+        laptopWs.send(JSON.stringify(requestData));
+    } catch (error) {
+        clearTimeout(timeout);
+        laptopWs.removeListener('message', responseHandler);
+        res.status(502).send('WebSocket error');
+    }
+};
     // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
 if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
     console.log('📤 Multipart form data detected (base64 mode)');
