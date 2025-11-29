@@ -568,7 +568,7 @@ function fixSingleCookie(cookieHeader, req) {
             requestData.body = body;
             requestData.hasBody = true;
             requestData.isRawMultipart = true;
-        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.preservedMethod)) {
+        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(preservedMethod)) {
             // Для обычных запросов
             if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
                 if (req.body && typeof req.body === 'object') {
