@@ -1,7 +1,7 @@
 Experimental webrtc proxy for tunneling traffic or sharing your local app(website,service etc) via any free simple hosting with js/html support
 
 
-Deploy this to your hosting with node.js,next.js or fastify(Render,glitch,heroku for example)
+Deploy this to your lightweight hosting(Render,glitch,heroku,fly.io for example) with node.js,next.js,bun.js or other js runtimes
 
 On your node from where you want to share app:
 
