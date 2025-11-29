@@ -43,7 +43,6 @@ app.use(express.static('public'));
 
 const laptops = new Map();
 const browsers = new Map();
-const preservedMethod = req.method;
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
@@ -304,7 +303,8 @@ function getContentType(headers) {
 // Основной прокси-маршрут
 app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
-  
+  const preservedMethod = req.method;
+
   // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
   console.log('=== PROXY REQUEST DEBUG ===');
   console.log('📨 Full URL:', req.originalUrl);
