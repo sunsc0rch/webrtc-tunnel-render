@@ -43,6 +43,7 @@ app.use(express.static('public'));
 
 const laptops = new Map();
 const browsers = new Map();
+const preservedMethod = req.method;
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
@@ -316,7 +317,6 @@ app.all('/proxy/*', async (req, res) => {
     'content-type': req.headers['content-type'],
     'user-agent': req.headers['user-agent']
   });
-    const preservedMethod = req.method;
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
     const authTokens = extractAuthTokens(req.headers, req.query);
