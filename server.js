@@ -448,7 +448,17 @@ function fixSingleCookie(cookieHeader, req) {
     path: requestData.path,
     query: requestData.query
   }, null, 2));
-
+if (targetPath.includes('/accounts/login/') && preservedMethod === 'POST') {
+    console.log('🔐 SERVER-SIDE LOGIN DIAGNOSTICS:');
+    console.log('   Request body preview:', req.body ? 
+        (typeof req.body === 'string' ? req.body.substring(0, 100) + '...' : 'object') : 'none');
+    console.log('   Request headers:', {
+        'content-type': req.headers['content-type'],
+        'cookie': req.headers['cookie'] ? '***' : 'none',
+        'content-length': req.headers['content-length']
+    });
+}
+    
   // Удаляем проблемные headers
   delete requestData.headers.host;
   delete requestData.headers['content-length'];
@@ -558,16 +568,7 @@ function fixSingleCookie(cookieHeader, req) {
     }
 };
 
-if (targetPath.includes('/accounts/login/') && preservedMethod === 'POST') {
-    console.log('🔐 SERVER-SIDE LOGIN DIAGNOSTICS:');
-    console.log('   Request body preview:', req.body ? 
-        (typeof req.body === 'string' ? req.body.substring(0, 100) + '...' : 'object') : 'none');
-    console.log('   Request headers:', {
-        'content-type': req.headers['content-type'],
-        'cookie': req.headers['cookie'] ? '***' : 'none',
-        'content-length': req.headers['content-length']
-    });
-}
+
   laptopWs.on('message', responseHandler);
   
     // ОБРАБОТКА ТЕЛА ЗАПРОСА - ПРАВИЛЬНАЯ ИНТЕГРАЦИЯ
