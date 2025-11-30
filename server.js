@@ -436,9 +436,13 @@ function fixSingleCookie(cookieHeader, req) {
   const requestData = {
     type: 'http-request',
     id: requestId,
-    method: preservedMethod,
+    method: req.method,
     path: '/' + targetPath,
-    headers: req.headers,
+    headers: {
+      ...req.headers,
+      'accept': '*/*',
+      'connection': 'close'
+    },
     query: req.query, 
     authInfo: {
     methods: Object.keys(authTokens),
