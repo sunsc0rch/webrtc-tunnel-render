@@ -195,21 +195,32 @@ function startClient() {
         }
     });
 
-    ws.on('message', async (data) => {
-        try {
-            const message = JSON.parse(data);
+ws.on('message', async (data) => {
+    console.log('=== LAPTOP INCOMING MESSAGE ===');
+    console.log('📨 Raw data received, length:', data.length);
+    console.log('📨 Data preview:', data.toString().substring(0, 200));
 
-            if (message.type === 'http-request') {
-            // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
-            console.log('=== LAPTOP REQUEST DEBUG ===');
-            console.log('📨 Received message:', JSON.stringify({
-                type: message.type,
-                id: message.id,
-                method: message.method,
-                path: message.path,
-                query: message.query,
-                hasBody: !!message.body
-            }, null, 2));
+
+   try {
+        const message = JSON.parse(data);
+        console.log('✅ Message parsed successfully');
+        console.log('📨 Message type:', message.type);
+        if (message.type === 'http-request') {
+            console.log('=== LAPTOP CLIENT DIAGNOSTICS ===');
+            console.log('📨 INCOMING MESSAGE ANALYSIS:');
+            console.log('   Type:', message.type);
+            console.log('   ID:', message.id);
+            console.log('   Method:', message.method);
+            console.log('   Path:', message.path);
+            console.log('   Headers:', {
+                'content-type': message.headers?.['content-type'],
+                'x-requested-with': message.headers?.['x-requested-with'],
+                'is-ajax': message.headers?.['x-requested-with'] === 'XMLHttpRequest'
+            });
+            console.log('   Has body:', !!message.body);
+            console.log('   Body type:', typeof message.body);
+            console.log('   IsBase64Multipart:', message.isBase64Multipart);
+            console.log('   IsRawMultipart:', message.isRawMultipart);
             
             // СОБИРАЕМ ПОЛНЫЙ URL
             let fullUrl = `${LOCAL_APP_URL}${message.path}`;
@@ -220,12 +231,12 @@ function startClient() {
                 const queryString = params.toString();
                 fullUrl += '?' + queryString;
                 console.log(`🔗 Query params added: ${queryString}`);
-                console.log(`🔑 Query keys: ${Object.keys(message.query)}`);
             } else {
                 console.log('⚠️ No query parameters in message');
             }
             
             console.log(`🎯 Final URL: ${fullUrl}`);
+            console.log(`🔒 Final method: ${message.method}`);
             
             // ПОДГОТАВЛИВАЕМ HEADERS
             const headers = {
@@ -252,8 +263,7 @@ function startClient() {
             
             // ДОБАВЛЯЕМ COOKIES ИЗ ВХОДЯЩЕГО ЗАПРОСА
             if (message.headers && message.headers.cookie) {
-	        lastIncomingCookies = message.headers.cookie;
-                // Объединяем с существующими cookies
+                lastIncomingCookies = message.headers.cookie;
                 if (headers['cookie']) {
                     headers['cookie'] += '; ' + message.headers.cookie;
                 } else {
@@ -261,140 +271,114 @@ function startClient() {
                 }
                 console.log(`🍪 Added incoming cookies: ${message.headers.cookie}`);
             }
-		if (message.method === 'POST' && message.path.includes('/profile/edit/')) {
-		    console.log('👤 Profile edit form detected');
-		    console.log('📋 Request headers:', JSON.stringify(headers, null, 2));
-		    console.log('📦 Has body:', message.hasBody);
-		    console.log('🍪 Cookies being sent:', headers['cookie']);
-		}
+
+            // СПЕЦИАЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ФОРМ РЕДАКТИРОВАНИЯ ПРОФИЛЯ
+            if (message.method === 'POST' && message.path.includes('/edit/')) {
+                console.log('👤 FORM SUBMISSION DETECTED:');
+                console.log('📋 Method:', message.method);
+                console.log('📋 Path:', message.path);
+                console.log('📋 Has body:', !!message.body);
+                console.log('🍪 Cookies being sent:', headers['cookie']);
+            }
+            
             const fetchOptions = {
                 method: message.method,
                 headers: headers,
-                // Важно: следуем редиректам
                 redirect: 'manual'
             };
-// обработка тела запроса:
-if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
-    if (message.isBase64Multipart) {
-        // Для base64 encoded multipart данных
-        console.log('📎 Base64 multipart form data detected');
 
-        // Декодируем из base64 обратно в buffer
-        const buffer = Buffer.from(message.body, 'base64');
-        console.log('📦 Decoded buffer length:', buffer.length);
-
-        fetchOptions.body = buffer;
-        // Восстанавливаем оригинальный content-type
-        if (message.originalContentType) {
-            headers['content-type'] = message.originalContentType;
-        } else if (message.headers && message.headers['content-type']) {
-            headers['content-type'] = message.headers['content-type'];
-        }
-
-    } else if (message.isRawMultipart) {
-        // Для raw multipart данных - передаем как строку с правильным content-type
-        console.log('📎 Raw multipart form data detected');
-        fetchOptions.body = message.body;
-
-        // Сохраняем оригинальный content-type с boundary
-        if (message.headers && message.headers['content-type']) {
-            headers['content-type'] = message.headers['content-type'];
-        }
-        console.log('📦 Raw multipart body length:', message.body.length);
-
-    } else if (typeof message.body === 'string') {
-        fetchOptions.body = message.body;
-
-        // Автоматически определяем Content-Type
-        if (message.body.includes('csrfmiddlewaretoken') ||
-            message.body.includes('username') ||
-            message.body.includes('password') ||
-            message.body.includes('application/x-www-form-urlencoded')) {
-            headers['content-type'] = 'application/x-www-form-urlencoded';
-        }
-
-    } else if (typeof message.body === 'object') {
-        // Для обычных объектов
-        fetchOptions.body = JSON.stringify(message.body);
-        headers['content-type'] = 'application/json';
-    }
-}
-
-// логируем аутентификацию, перед fetch:
-console.log('🔐 Request Auth Analysis:');
-if (message.authInfo) {
-    console.log('   - Auth methods:', message.authInfo.methods);
-    console.log('   - Has auth:', message.authInfo.hasAuth);
-}
-
-// Анализ headers на наличие токенов
-const authHeaders = {};
-if (message.headers) {
-    Object.entries(message.headers).forEach(([key, value]) => {
-        const lowerKey = key.toLowerCase();
-        if (lowerKey.includes('auth') || 
-            lowerKey.includes('token') || 
-            lowerKey.includes('api-key') ||
-            lowerKey.includes('authorization')) {
-            authHeaders[key] = value;
-        }
-    });
-}
-
-if (Object.keys(authHeaders).length > 0) {
-    console.log('🔑 Auth headers being sent:');
-    Object.entries(authHeaders).forEach(([key, value]) => {
-        // Маскируем чувствительные данные в логах
-        let logValue = value;
-        if (key.toLowerCase().includes('authorization') && typeof value === 'string') {
-            if (value.startsWith('Bearer ') || value.startsWith('Token ')) {
-                const prefix = value.split(' ')[0];
-                const token = value.split(' ')[1];
-                logValue = `${prefix} ${token.length > 8 ? token.substring(0, 4) + '...' + token.substring(token.length - 4) : '***'}`;
+            // ОБРАБОТКА ТЕЛА ЗАПРОСА:
+            if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
+                console.log(`📦 Processing body for ${message.method} request`);
+                
+                if (message.isBase64Multipart) {
+                    // Для base64 encoded multipart данных
+                    console.log('📎 Base64 multipart form data detected');
+                    
+                    // Декодируем из base64 обратно в buffer
+                    const buffer = Buffer.from(message.body, 'base64');
+                    console.log('📦 Decoded buffer length:', buffer.length);
+                    
+                    fetchOptions.body = buffer;
+                    
+                    // Восстанавливаем оригинальный content-type
+                    if (message.originalContentType) {
+                        headers['content-type'] = message.originalContentType;
+                    } else if (message.headers && message.headers['content-type']) {
+                        headers['content-type'] = message.headers['content-type'];
+                    }
+                    
+                } else if (message.isRawMultipart) {
+                    // Для raw multipart данных
+                    console.log('📎 Raw multipart form data detected');
+                    fetchOptions.body = message.body;
+                    
+                    if (message.headers && message.headers['content-type']) {
+                        headers['content-type'] = message.headers['content-type'];
+                    }
+                    console.log('📦 Raw multipart body length:', message.body.length);
+                    
+                } else if (typeof message.body === 'string') {
+                    fetchOptions.body = message.body;
+                    
+                    // Автоматически определяем Content-Type
+                    if (message.body.includes('csrfmiddlewaretoken') ||
+                        message.body.includes('username') ||
+                        message.body.includes('password') ||
+                        message.body.includes('application/x-www-form-urlencoded')) {
+                        headers['content-type'] = 'application/x-www-form-urlencoded';
+                    }
+                    
+                } else if (typeof message.body === 'object') {
+                    // Для обычных объектов
+                    fetchOptions.body = JSON.stringify(message.body);
+                    headers['content-type'] = 'application/json';
+                }
+                
+                console.log(`📦 Final body type: ${typeof fetchOptions.body}`);
+            } else {
+                console.log('📦 No body in request');
             }
-        }
-        if (key.toLowerCase().includes('api-key') && typeof value === 'string') {
-            logValue = value.length > 8 ? value.substring(0, 4) + '...' + value.substring(value.length - 4) : '***';
-        }
-        console.log(`   ${key}: ${logValue}`);
-    });
-}
 
-                try {
-                    const response = await fetch(fullUrl, fetchOptions);
+            // ДИАГНОСТИКА АУТЕНТИФИКАЦИИ
+            console.log('🔐 Request Auth Analysis:');
+            if (message.authInfo) {
+                console.log('   - Auth methods:', message.authInfo.methods);
+                console.log('   - Has auth:', message.authInfo.hasAuth);
+            }
 
-    // ДИАГНОСТИКА: определяем тип контента
-    const contentType = response.headers.get('content-type') || '';
+            try {
+                console.log(`🚀 Sending ${message.method} request to local app...`);
+                let response = await fetch(fullUrl, fetchOptions);
+                // ДИАГНОСТИКА: определяем тип контента
+                const contentType = response.headers.get('content-type') || '';
 
-    let body;
+                let body;
 
-    // ПРАВИЛЬНОЕ ПОЛУЧЕНИЕ ТЕЛА ОТВЕТА В ЗАВИСИМОСТИ ОТ ТИПА
-    if (contentType.includes('image/') ||
-        contentType.includes('application/octet-stream') ||
-        contentType.includes('font/') ||
-        contentType.includes('binary')) {
-
-        // ДЛЯ КАРТИНОК И БИНАРНЫХ ДАННЫХ - используем buffer и base64
-        const buffer = await response.buffer();
-        body = buffer.toString('base64');
-
-    } else if (contentType.includes('text/html') ||
-               contentType.includes('text/plain') ||
-               contentType.includes('text/css') ||
-               contentType.includes('application/json')) {
-
-        // ДЛЯ ТЕКСТОВЫХ ДАННЫХ - используем text() или json()
-        if (contentType.includes('application/json')) {
-            body = await response.json();
-        } else {
-            body = await response.text();
-        }
-
-    } else {
-        // ПО УМОЛЧАНИЮ - как текст
-        body = await response.text();
-    }
-
+                // ПРАВИЛЬНОЕ ПОЛУЧЕНИЕ ТЕЛА ОТВЕТА
+                if (contentType.includes('image/') || 
+                    contentType.includes('application/octet-stream') ||
+                    contentType.includes('font/') ||
+                    contentType.includes('binary')) {
+                    
+                    const buffer = await response.buffer();
+                    body = buffer.toString('base64');
+                    
+                } else if (contentType.includes('text/html') || 
+                           contentType.includes('text/plain') ||
+                           contentType.includes('text/css') ||
+                           contentType.includes('application/json')) {
+                    
+                    if (contentType.includes('application/json')) {
+                        body = await response.json();
+                    } else {
+                        body = await response.text();
+                    }
+                    
+                } else {
+                    body = await response.text();
+                }
+                
                 // СОБИРАЕМ ВСЕ HEADERS ОТВЕТА
                 const responseHeaders = {};
                 response.headers.forEach((value, key) => {
@@ -418,37 +402,33 @@ if (Object.keys(authHeaders).length > 0) {
                     responseMessage.cookies = cookies;
                 }
 
+                console.log(`✅ Sending response ${message.id} with status ${response.status}`);
                 ws.send(JSON.stringify(responseMessage));
-
-                // ЛОГИРУЕМ COOKIES
-                if (cookies.length > 0) {
-                    console.log(`🍪 Received ${cookies.length} cookies from response`);
-                }
-
-                } catch (error) {
-                    console.error('❌ Fetch error:', error);
-                    ws.send(JSON.stringify({
-                        type: 'http-response',
-                        id: message.id,
-                        status: 502,
-                        headers: {'Content-Type': 'text/plain'},
-                        body: `Error: ${error.message}`
-                    }));
-                }
+        
+            } catch (error) {
+                console.error('❌ Fetch error:', error);
+                ws.send(JSON.stringify({
+                    type: 'http-response', 
+                    id: message.id,
+                    status: 502,
+                    headers: {'Content-Type': 'text/plain'},
+                    body: `Error: ${error.message}`
+                }));
             }
-            else if (message.type === 'welcome') {
-                console.log(`👋 ${message.server}`);
-            }
-            else if (message.type === 'registered') {
-                console.log(`✅ Registered: ${message.id}`);
-            }
-            else if (message.type === 'ping') {
-                ws.send(JSON.stringify({ type: 'pong' }));
-            }
-        } catch (error) {
-            console.error('❌ Message error:', error);
         }
-    });
+        else if (message.type === 'welcome') {
+            console.log(`👋 ${message.server}`);
+        }
+        else if (message.type === 'registered') {
+            console.log(`✅ Registered: ${message.id}`);
+        }
+        else if (message.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+        }
+    } catch (error) {
+        console.error('❌ Message error:', error);
+    }
+});
 
     ws.on('close', () => {
         console.log('🔌 Disconnected from tunnel server');
