@@ -105,9 +105,12 @@ app.get('/test-query', (req, res) => {
 });
 
 // УЛУЧШЕННАЯ функция для фиксации HTML контента
-function fixHtmlContent(html, currentPath = '') {
+function fixHtmlContent(html, currentPath = '', isAjaxRequest = false) {
   if (!html || typeof html !== 'string') return html;
-  
+      if (isAjaxRequest) {
+        console.log('🔍 AJAX request - skipping URL fixing');
+        return html;
+    }
   let fixedHtml = html;
   
   // Заменяем все относительные ссылки
@@ -589,7 +592,8 @@ console.log('   Is comment edit:', isCommentEdit);
                 }
             } else if (contentType.includes('text/html') || contentType.includes('text/css')) {
                 console.log(`🔧 Fixing URLs in ${contentType}`);
-                responseBody = fixHtmlContent(responseBody, targetPath);
+                const isAjax = req.headers['x-requested-with'] === 'XMLHttpRequest';
+                responseBody = fixHtmlContent(responseBody, targetPath, isAjax);
             }   
             res.status(message.status || 200).send(responseBody);
         }
