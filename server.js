@@ -318,10 +318,6 @@ app.all('/proxy/*', async (req, res) => {
 
 
 
-  // Логируем первые 200 символов тела для анализа
-  if (req.body && typeof req.body === 'string') {
-    console.log('   Body preview:', req.body.substring(0, 200));
-  }
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
     const authTokens = extractAuthTokens(req.headers, req.query);
@@ -442,12 +438,7 @@ function fixSingleCookie(cookieHeader, req) {
     id: requestId,
     method: preservedMethod,
     path: '/' + targetPath,
-    headers: {
-      ...req.headers,
-      'accept': '*/*',
-      'connection': 'close',
-      'x-requested-with': req.headers['X-Requested-With'] || ''
-    },
+    headers: req.headers,
     query: req.query, 
     authInfo: {
     methods: Object.keys(authTokens),
