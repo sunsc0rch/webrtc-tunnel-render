@@ -648,8 +648,14 @@ const handleRequest = (body = null) => {
 };
 // ОСОБАЯ ОБРАБОТКА MULTIPART/FORM-DATA
 if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
-    console.log('📤 Multipart form data detected (base64 mode)');
+    console.log('🔍 MULTIPART DETECTION DEBUG:');
+    console.log('   Original method:', req.method);
+    console.log('   Is AJAX:', req.headers['x-requested-with'] === 'XMLHttpRequest');
     console.log('   Content-Type:', req.headers['content-type']);
+    
+    // ВАЖНО: Сохраняем оригинальный метод для AJAX запросов
+    const originalMethod = req.method;
+    
     const chunks = [];
     let totalSize = 0;
     
@@ -661,6 +667,7 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
+        requestData.method = originalMethod;
 
         
         // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
