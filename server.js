@@ -305,24 +305,21 @@ app.all('/proxy/*', async (req, res) => {
   const targetPath = req.params[0] || '';
   const preservedMethod = req.method;
 
-  // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
-  console.log('=== PROXY REQUEST DEBUG ===');
-  console.log('📨 Full URL:', req.originalUrl);
-  console.log('🔧 Method:', req.method);
-  console.log('📍 Path:', targetPath);
-  console.log('❓ Query params:', req.query);
-  console.log('   - Has body in request:', !!req.body);
-  console.log('📋 Headers:', {
-    host: req.headers.host,
-    'content-type': req.headers['content-type'],
-    'user-agent': req.headers['user-agent']
-  });
-    // ЛОГИРУЕМ ТЕЛО ЕСЛИ ОНО ЕСТЬ
-if (req.body && typeof req.body === 'string') {
-    console.log('   Body preview (first 200 chars):', req.body.substring(0, 200));
-} else if (req.body && typeof req.body === 'object') {
-    console.log('   Body object:', JSON.stringify(req.body, null, 2).substring(0, 500));
-}
+  console.log('=== PROXY REQUEST DIAGNOSTICS ===');
+  console.log('🔍 REQUEST ANALYSIS:');
+  console.log('   Original URL:', req.originalUrl);
+  console.log('   Method:', req.method);
+  console.log('   Content-Type:', req.headers['content-type']);
+  console.log('   X-Requested-With:', req.headers['x-requested-with']);
+  console.log('   Is AJAX:', req.headers['x-requested-with'] === 'XMLHttpRequest');
+  console.log('   Has body:', !!req.body);
+  console.log('   Body type:', typeof req.body);
+  console.log('   Body keys:', req.body ? Object.keys(req.body) : 'none');
+  
+  // Логируем первые 200 символов тела для анализа
+  if (req.body && typeof req.body === 'string') {
+    console.log('   Body preview:', req.body.substring(0, 200));
+  }
       // АНАЛИЗ АУТЕНТИФИКАЦИИ
     console.log('🔐 AUTHENTICATION ANALYSIS:');
     const authTokens = extractAuthTokens(req.headers, req.query);
