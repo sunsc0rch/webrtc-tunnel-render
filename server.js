@@ -494,19 +494,6 @@ console.log('   Is comment edit:', isCommentEdit);
     console.log('   Message path:', requestData.path);
     console.log('   Has body:', requestData.hasBody);
 
-    try {
-        const messageString = JSON.stringify(requestData);
-        console.log('   JSON string length:', messageString.length);
-        console.log('   JSON preview:', messageString.substring(0, 200) + '...');
-        
-        laptopWs.send(messageString);
-        console.log('✅ Message sent successfully');
-    } catch (error) {
-        console.error('❌ WebSocket send error:', error);
-        console.error('❌ Error details:', error.message);
-        res.status(502).send('WebSocket send error');
-        return;
-    }
   // Удаляем проблемные headers
   delete requestData.headers.host;
   delete requestData.headers['content-length'];
