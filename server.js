@@ -728,7 +728,27 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (data) => {
     try {
       const message = JSON.parse(data);
-      
+              // ДИАГНОСТИКА ВСЕХ СООБЩЕНИЙ
+        console.log('=== WEBSOCKET MESSAGE DIAGNOSTICS ===');
+        console.log('📨 Raw message length:', data.length);
+        console.log('📨 Message type:', message.type);
+        console.log('📨 Message keys:', Object.keys(message));
+        
+                if (message.type === 'http-request') {
+            console.log('🔍 HTTP REQUEST ANALYSIS:');
+            console.log('   Method:', message.method);
+            console.log('   Path:', message.path);
+            console.log('   Has body:', !!message.body);
+            console.log('   Body type:', typeof message.body);
+            console.log('   Body length:', message.body ? message.body.length : 0);
+            console.log('   Body keys:', message.body && typeof message.body === 'object' ? Object.keys(message.body) : 'N/A');
+            console.log('   Headers:', message.headers);
+            
+            // Логируем первые 200 символов тела
+            if (message.body && typeof message.body === 'string') {
+                console.log('   Body preview:', message.body.substring(0, 200));
+            }
+        }
       switch (message.type) {
         case 'register-laptop':
           laptops.set(ws, {
