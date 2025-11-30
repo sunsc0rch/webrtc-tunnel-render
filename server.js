@@ -315,40 +315,9 @@ app.all('/proxy/*', async (req, res) => {
   console.log('   Has body:', !!req.body);
   console.log('   Body type:', typeof req.body);
   console.log('   Body keys:', req.body ? Object.keys(req.body) : 'none');
-      // ПРОВЕРКА СОСТОЯНИЯ WEBSOCKET
-    console.log('🔌 WebSocket connection check:');
-    console.log('   Ready state:', laptopWs.readyState); // 1 = OPEN, 3 = CLOSED
-    console.log('   Connection alive:', laptopWs.readyState === 1);
 
-    if (laptopWs.readyState !== 1) {
-        console.error('❌ WebSocket not connected, readyState:', laptopWs.readyState);
-        laptops.delete(laptopWs);
-        return res.status(503).send('WebSocket connection lost');
-    }
 
-    // ДИАГНОСТИКА ОТПРАВКИ
-    console.log('=== WEBSOCKET SEND DIAGNOSTICS ===');
-    console.log('📤 Preparing to send to laptop:');
-    console.log('   WebSocket readyState:', laptopWs.readyState);
-    console.log('   WebSocket bufferedAmount:', laptopWs.bufferedAmount);
-    console.log('   Message ID:', requestData.id);
-    console.log('   Message method:', requestData.method);
-    console.log('   Message path:', requestData.path);
-    console.log('   Has body:', requestData.hasBody);
 
-    try {
-        const messageString = JSON.stringify(requestData);
-        console.log('   JSON string length:', messageString.length);
-        console.log('   JSON preview:', messageString.substring(0, 200) + '...');
-        
-        laptopWs.send(messageString);
-        console.log('✅ Message sent successfully');
-    } catch (error) {
-        console.error('❌ WebSocket send error:', error);
-        console.error('❌ Error details:', error.message);
-        res.status(502).send('WebSocket send error');
-        return;
-    }
   // Логируем первые 200 символов тела для анализа
   if (req.body && typeof req.body === 'string') {
     console.log('   Body preview:', req.body.substring(0, 200));
@@ -458,7 +427,16 @@ function fixSingleCookie(cookieHeader, req) {
   const requestId = generateId();
   
   console.log(`🔄 Forwarding to laptop: ${requestId}`);
+      // ПРОВЕРКА СОСТОЯНИЯ WEBSOCKET
+    console.log('🔌 WebSocket connection check:');
+    console.log('   Ready state:', laptopWs.readyState); // 1 = OPEN, 3 = CLOSED
+    console.log('   Connection alive:', laptopWs.readyState === 1);
 
+    if (laptopWs.readyState !== 1) {
+        console.error('❌ WebSocket not connected, readyState:', laptopWs.readyState);
+        laptops.delete(laptopWs);
+        return res.status(503).send('WebSocket connection lost');
+    }
   const requestData = {
     type: 'http-request',
     id: requestId,
@@ -505,8 +483,31 @@ console.log('   Original:', req.method);
 console.log('   Preserved:', preservedMethod);
 console.log('   Is AJAX:', isAjaxRequest);
 console.log('   Is comment edit:', isCommentEdit);
+
+        // ДИАГНОСТИКА ОТПРАВКИ
+    console.log('=== WEBSOCKET SEND DIAGNOSTICS ===');
+    console.log('📤 Preparing to send to laptop:');
+    console.log('   WebSocket readyState:', laptopWs.readyState);
+    console.log('   WebSocket bufferedAmount:', laptopWs.bufferedAmount);
+    console.log('   Message ID:', requestData.id);
+    console.log('   Message method:', requestData.method);
+    console.log('   Message path:', requestData.path);
+    console.log('   Has body:', requestData.hasBody);
+
+    try {
+        const messageString = JSON.stringify(requestData);
+        console.log('   JSON string length:', messageString.length);
+        console.log('   JSON preview:', messageString.substring(0, 200) + '...');
+        
+        laptopWs.send(messageString);
+        console.log('✅ Message sent successfully');
+    } catch (error) {
+        console.error('❌ WebSocket send error:', error);
+        console.error('❌ Error details:', error.message);
+        res.status(502).send('WebSocket send error');
+        return;
+    }
   // Удаляем проблемные headers
-    
   delete requestData.headers.host;
   delete requestData.headers['content-length'];
   delete requestData.headers['accept-encoding'];
