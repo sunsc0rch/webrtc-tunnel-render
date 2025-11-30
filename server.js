@@ -461,16 +461,7 @@ function fixSingleCookie(cookieHeader, req) {
     path: requestData.path,
     query: requestData.query
   }, null, 2));
-if (targetPath.includes('/accounts/login/') && preservedMethod === 'POST') {
-    console.log('🔐 SERVER-SIDE LOGIN DIAGNOSTICS:');
-    console.log('   Request body preview:', req.body ? 
-        (typeof req.body === 'string' ? req.body.substring(0, 100) + '...' : 'object') : 'none');
-    console.log('   Request headers:', {
-        'content-type': req.headers['content-type'],
-        'cookie': req.headers['cookie'] ? '***' : 'none',
-        'content-length': req.headers['content-length']
-    });
-}
+
 
 const isAjaxRequest = req.headers['x-requested-with'] === 'XMLHttpRequest';
 const isCommentEdit = targetPath.includes('/comment/') && targetPath.includes('/edit/');
@@ -481,16 +472,6 @@ console.log('   Original:', req.method);
 console.log('   Preserved:', preservedMethod);
 console.log('   Is AJAX:', isAjaxRequest);
 console.log('   Is comment edit:', isCommentEdit);
-
-        // ДИАГНОСТИКА ОТПРАВКИ
-    console.log('=== WEBSOCKET SEND DIAGNOSTICS ===');
-    console.log('📤 Preparing to send to laptop:');
-    console.log('   WebSocket readyState:', laptopWs.readyState);
-    console.log('   WebSocket bufferedAmount:', laptopWs.bufferedAmount);
-    console.log('   Message ID:', requestData.id);
-    console.log('   Message method:', requestData.method);
-    console.log('   Message path:', requestData.path);
-    console.log('   Has body:', requestData.hasBody);
 
   // Удаляем проблемные headers
   delete requestData.headers.host;
@@ -748,12 +729,7 @@ wss.on('connection', (ws, req) => {
 ws.on('message', (data) => {
     try {
         const message = JSON.parse(data);
-        
-        // ДИАГНОСТИКА ВСЕХ СООБЩЕНИЙ
-        console.log('=== WEBSOCKET MESSAGE DIAGNOSTICS ===');
-        console.log('📨 Raw message length:', data.length);
-        console.log('📨 Message type:', message.type);
-        console.log('📨 Message keys:', Object.keys(message));
+    
         
         if (message.type === 'http-request') {
             console.log('🔍 HTTP REQUEST ANALYSIS:');
