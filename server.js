@@ -654,11 +654,7 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
-         // АНАЛИЗИРУЕМ СОДЕРЖИМОЕ
-        const bufferString = rawBuffer.toString('utf8');
-        console.log('   Contains csrfmiddlewaretoken:', bufferString.includes('csrfmiddlewaretoken'));
-        console.log('   Contains text=', bufferString.includes('text='));
-        console.log('   First 500 chars:', bufferString.substring(0, 500));
+
         
         // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
         const bufferString = rawBuffer.toString('utf8');
@@ -667,7 +663,10 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
             !bufferString.includes('filename=')) {
             
             console.log('🔍 Simple form detected, sending as raw data');
-            
+                     // АНАЛИЗИРУЕМ СОДЕРЖИМОЕ
+            console.log('   Contains csrfmiddlewaretoken:', bufferString.includes('csrfmiddlewaretoken'));
+            console.log('   Contains text=', bufferString.includes('text='));
+            console.log('   First 500 chars:', bufferString.substring(0, 500));
             requestData.method = preservedMethod;
             requestData.body = bufferString; // ← отправляем как строку
             requestData.hasBody = true;
