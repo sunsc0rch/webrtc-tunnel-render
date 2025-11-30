@@ -734,15 +734,29 @@ wss.on('connection', (ws, req) => {
         console.log('📨 Message type:', message.type);
         console.log('📨 Message keys:', Object.keys(message));
         
-                if (message.type === 'http-request') {
-            console.log('🔍 HTTP REQUEST ANALYSIS:');
-            console.log('   Method:', message.method);
-            console.log('   Path:', message.path);
-            console.log('   Has body:', !!message.body);
-            console.log('   Body type:', typeof message.body);
-            console.log('   Body length:', message.body ? message.body.length : 0);
-            console.log('   Body keys:', message.body && typeof message.body === 'object' ? Object.keys(message.body) : 'N/A');
-            console.log('   Headers:', message.headers);
+        // ПЕРЕД отправкой запроса на laptop
+console.log('=== WEBSOCKET SEND DIAGNOSTICS ===');
+console.log('📤 Preparing to send to laptop:');
+console.log('   WebSocket readyState:', laptopWs.readyState);
+console.log('   WebSocket bufferedAmount:', laptopWs.bufferedAmount);
+console.log('   Message ID:', requestData.id);
+console.log('   Message method:', requestData.method);
+console.log('   Message path:', requestData.path);
+console.log('   Has body:', requestData.hasBody);
+
+try {
+    const messageString = JSON.stringify(requestData);
+    console.log('   JSON string length:', messageString.length);
+    console.log('   JSON preview:', messageString.substring(0, 200) + '...');
+    
+    laptopWs.send(messageString);
+    console.log('✅ Message sent successfully');
+} catch (error) {
+    console.error('❌ WebSocket send error:', error);
+    console.error('❌ Error details:', error.message);
+    res.status(502).send('WebSocket send error');
+    return;
+}
             
             // Логируем первые 200 символов тела
             if (message.body && typeof message.body === 'string') {
