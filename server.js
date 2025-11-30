@@ -727,7 +727,12 @@ wss.on('connection', (ws, req) => {
   
   ws.on('message', (data) => {
     try {
-      const message = JSON.parse(data);
+    const message = JSON.parse(data);
+    const messageString = JSON.stringify(requestData);
+    console.log('   JSON string length:', messageString.length);
+    console.log('   JSON preview:', messageString.substring(0, 200) + '...');
+    laptopWs.send(messageString);
+    console.log('✅ Message sent successfully');
               // ДИАГНОСТИКА ВСЕХ СООБЩЕНИЙ
         console.log('=== WEBSOCKET MESSAGE DIAGNOSTICS ===');
         console.log('📨 Raw message length:', data.length);
@@ -744,13 +749,8 @@ console.log('   Message method:', requestData.method);
 console.log('   Message path:', requestData.path);
 console.log('   Has body:', requestData.hasBody);
 
-try {
-    const messageString = JSON.stringify(requestData);
-    console.log('   JSON string length:', messageString.length);
-    console.log('   JSON preview:', messageString.substring(0, 200) + '...');
-    
-    laptopWs.send(messageString);
-    console.log('✅ Message sent successfully');
+
+
 } catch (error) {
     console.error('❌ WebSocket send error:', error);
     console.error('❌ Error details:', error.message);
