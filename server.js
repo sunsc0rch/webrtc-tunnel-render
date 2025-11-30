@@ -465,8 +465,23 @@ if (targetPath.includes('/accounts/login/') && preservedMethod === 'POST') {
         'content-length': req.headers['content-length']
     });
 }
-    
+
+const isAjaxRequest = req.headers['x-requested-with'] === 'XMLHttpRequest';
+const isCommentEdit = targetPath.includes('/comment/') && targetPath.includes('/edit/');
+
+// ПРИНУДИТЕЛЬНО СОХРАНЯЕМ POST ДЛЯ AJAX И РЕДАКТИРОВАНИЯ КОММЕНТАРИЕВ
+if ((isAjaxRequest || isCommentEdit) && req.method === 'POST') {
+    console.log('🎯 AJAX/Comment edit detected - preserving POST method');
+    preservedMethod = 'POST'; // ← ПРИНУДИТЕЛЬНО
+}
+
+console.log('🔍 FINAL METHOD DECISION:');
+console.log('   Original:', req.method);
+console.log('   Preserved:', preservedMethod);
+console.log('   Is AJAX:', isAjaxRequest);
+console.log('   Is comment edit:', isCommentEdit);
   // Удаляем проблемные headers
+    
   delete requestData.headers.host;
   delete requestData.headers['content-length'];
   delete requestData.headers['accept-encoding'];
