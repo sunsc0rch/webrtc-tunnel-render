@@ -588,7 +588,8 @@ console.log('   Is comment edit:', isCommentEdit);
 const handleRequest = (body = null) => {
     // ВАЖНО: всегда устанавливаем метод
     requestData.method = preservedMethod;
-    
+    console.log('🔧 handleRequest - preservedMethod:', preservedMethod);
+    console.log('🔧 handleRequest - final method:', requestData.method);
     if (body !== null) {
         requestData.body = body;
         requestData.hasBody = true;
