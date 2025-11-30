@@ -668,8 +668,6 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
         requestData.method = originalMethod;
-
-        
         // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
         const bufferString = rawBuffer.toString('utf8');
         if (bufferString.includes('csrfmiddlewaretoken') && 
@@ -681,7 +679,6 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
             console.log('   Contains csrfmiddlewaretoken:', bufferString.includes('csrfmiddlewaretoken'));
             console.log('   Contains text=', bufferString.includes('text='));
             console.log('   First 500 chars:', bufferString.substring(0, 500));
-            requestData.method = preservedMethod;
             requestData.body = bufferString; // ← отправляем как строку
             requestData.hasBody = true;
             requestData.isRawMultipart = true;
@@ -690,8 +687,6 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
             // Это настоящий multipart с файлами
             console.log('🔍 Real multipart with files detected, using base64');
             const base64Body = rawBuffer.toString('base64');
-            
-            requestData.method = preservedMethod;
             requestData.body = base64Body;
             requestData.hasBody = true;
             requestData.isBase64Multipart = true;
