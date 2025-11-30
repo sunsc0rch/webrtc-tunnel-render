@@ -588,8 +588,7 @@ console.log('   Is comment edit:', isCommentEdit);
 const handleRequest = (body = null) => {
     // ВАЖНО: всегда устанавливаем метод
     requestData.method = preservedMethod;
-    console.log('🔧 handleRequest - preservedMethod:', preservedMethod);
-    console.log('🔧 handleRequest - final method:', requestData.method);
+
     if (body !== null) {
         requestData.body = body;
         requestData.hasBody = true;
@@ -651,11 +650,13 @@ const handleRequest = (body = null) => {
 if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
     console.log('🔍 MULTIPART DETECTION DEBUG:');
     console.log('   Original method:', req.method);
-    console.log('   Is AJAX:', req.headers['x-requested-with'] === 'XMLHttpRequest');
     console.log('   Content-Type:', req.headers['content-type']);
     
+    const isAjax = req.headers['x-requested-with'] === 'XMLHttpRequest';
     // ВАЖНО: Сохраняем оригинальный метод для AJAX запросов
     const originalMethod = req.method;
+    console.log('   Stored method:', originalMethod);
+    console.log('   Stored isAjax:', isAjax);
     
     const chunks = [];
     let totalSize = 0;
@@ -669,6 +670,7 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     req.on('end', () => {
         const rawBuffer = Buffer.concat(chunks);
         requestData.method = originalMethod;
+        console.log('🎯 FINAL METHOD FOR LAPTOP:', requestData.method);
         // ПРОВЕРЯЕМ: если это простая форма (не файлы), обрабатываем как текст
         const bufferString = rawBuffer.toString('utf8');
         if (bufferString.includes('csrfmiddlewaretoken') && 
