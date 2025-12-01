@@ -497,27 +497,137 @@ console.log('   Is comment edit:', isCommentEdit);
         const contentType = getContentType(responseHeaders);
 
 // Проверяем, нужно ли обрабатывать этот контент
+// Улучшенная функция для определения необходимости обработки контента
 function shouldFixContent(contentType, isAjaxRequest) {
-    // Никогда не обрабатываем JSON
-    if (contentType.includes('application/json')) {
+    if (!contentType) {
+        console.log('⚠️ No content-type provided, skipping fix');
         return false;
     }
     
-    // Никогда не обрабатываем AJAX запросы
+    contentType = contentType.toLowerCase();
+    
+    // 1. НИКОГДА не обрабатываем JSON, XML, бинарные данные
+    const skipContentTypes = [
+        'application/json',
+        'application/xml',
+        'text/xml',
+        'application/octet-stream',
+        'application/pdf',
+        'application/zip',
+        'application/gzip',
+        'image/svg+xml' // SVG как XML
+    ];
+    
+    for (const skipType of skipContentTypes) {
+        if (contentType.includes(skipType)) {
+            console.log(`⏭️ Skipping ${contentType} (blacklisted)`);
+            return false;
+        }
+    }
+    
+    // 2. Всегда пропускаем AJAX запросы (кроме HTML/CSS которые могут приходить через AJAX)
     if (isAjaxRequest) {
+        // Но некоторые AJAX запросы могут возвращать HTML (например, пагинация)
+        if (contentType.includes('text/html') || contentType.includes('text/css')) {
+            console.log(`🔧 AJAX but HTML/CSS, fixing ${contentType}`);
+            return true;
+        }
+        console.log(`⏭️ Skipping AJAX ${contentType}`);
         return false;
     }
     
-    // Обрабатываем только HTML, CSS, JavaScript
-    return contentType.includes('text/html') || 
-           contentType.includes('text/css') ||
-           contentType.includes('application/javascript');
+    // 3. Обрабатываем текст/HTML контент
+    const textContentTypes = [
+        'text/html',
+        'text/css',
+        'text/javascript',
+        'application/javascript',
+        'application/x-javascript',
+        'text/plain'
+    ];
+    
+    for (const textType of textContentTypes) {
+        if (contentType.includes(textType)) {
+            console.log(`🔧 Fixing ${contentType} (text content)`);
+            return true;
+        }
+    }
+    
+    // 4. Проверяем изображения (только для base64 декодирования, не для fixHtmlContent)
+    const imageTypes = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/bmp',
+        'image/tiff',
+        'image/svg+xml'
+    ];
+    
+    for (const imageType of imageTypes) {
+        if (contentType.includes(imageType)) {
+            console.log(`🖼️ Image detected: ${contentType}, skipping HTML fix`);
+            return false; // Изображения не обрабатываем fixHtmlContent
+        }
+    }
+    
+    // 5. Проверяем шрифты
+    const fontTypes = [
+        'font/woff',
+        'font/woff2',
+        'font/ttf',
+        'font/otf',
+        'application/font-woff',
+        'application/font-woff2'
+    ];
+    
+    for (const fontType of fontTypes) {
+        if (contentType.includes(fontType)) {
+            console.log(`🔤 Font detected: ${contentType}, skipping HTML fix`);
+            return false;
+        }
+    }
+    
+    // 6. По умолчанию пропускаем (безопаснее)
+    console.log(`⏭️ Default skip for ${contentType}`);
+    return false;
 }
-        if (shouldFixContent(contentType, isAjaxRequest)) {
-    console.log(`🔧 Fixing URLs in ${contentType}`);
+
+// Обновленная функция получения content type
+function getContentType(headers) {
+    const contentType = headers['content-type'] || headers['Content-Type'] || '';
+    return contentType.toLowerCase();
+}
+
+// Обновленная обработка ответа в основном прокси-маршруте
+const contentType = getContentType(responseHeaders);
+console.log(`📄 Processing response with Content-Type: ${contentType}`);
+
+// Определяем, нужно ли обрабатывать контент
+const shouldFix = shouldFixContent(contentType, isAjaxRequest);
+
+if (shouldFix) {
+    console.log(`🔧 Running fixHtmlContent for ${contentType}`);
     responseBody = fixHtmlContent(responseBody, targetPath, isAjaxRequest);
+} else if (contentType.includes('image/') || 
+           contentType.includes('font/') ||
+           contentType.includes('application/octet-stream')) {
+    
+    console.log(`🔧 Handling binary content: ${contentType}`);
+    
+    // Обработка бинарных данных (base64 декодирование)
+    if (typeof responseBody === 'string' && isBase64(responseBody)) {
+        try {
+            const buffer = Buffer.from(responseBody, 'base64');
+            responseBody = buffer;
+            console.log(`🖼️ Decoded base64 to buffer, length: ${buffer.length}`);
+        } catch (error) {
+            console.error('❌ Error decoding base64:', error);
+        }
+    }
 } else {
-    console.log(`🔧 Skipping URL fixing for ${contentType}`);
+    console.log(`🔧 Skipping content processing for ${contentType}`);
 }
         
         if (message.type === 'http-response' && message.id === requestId) {
