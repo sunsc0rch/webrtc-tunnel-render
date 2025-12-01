@@ -499,11 +499,6 @@ console.log('   Is comment edit:', isCommentEdit);
 // Проверяем, нужно ли обрабатывать этот контент
 // Улучшенная функция для определения необходимости обработки контента
 function shouldFixContent(contentType, isAjaxRequest) {
-    if (!contentType) {
-        console.log('⚠️ No content-type provided, skipping fix');
-        return false;
-    }
-    
     contentType = contentType.toLowerCase();
     
     // 1. НИКОГДА не обрабатываем JSON, XML, бинарные данные
