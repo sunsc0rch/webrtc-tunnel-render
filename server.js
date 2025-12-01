@@ -492,6 +492,32 @@ console.log('   Is comment edit:', isCommentEdit);
  const responseHandler = (data) => {
     try {
         const message = JSON.parse(data);
+        let responseBody = message.body || '';
+        const responseHeaders = message.headers || {};
+        
+// Проверяем, нужно ли обрабатывать этот контент
+function shouldFixContent(contentType, isAjaxRequest) {
+    // Никогда не обрабатываем JSON
+    if (contentType.includes('application/json')) {
+        return false;
+    }
+    
+    // Никогда не обрабатываем AJAX запросы
+    if (isAjaxRequest) {
+        return false;
+    }
+    
+    // Обрабатываем только HTML, CSS, JavaScript
+    return contentType.includes('text/html') || 
+           contentType.includes('text/css') ||
+           contentType.includes('application/javascript');
+}
+        if (shouldFixContent(contentType, isAjaxRequest)) {
+    console.log(`🔧 Fixing URLs in ${contentType}`);
+    responseBody = fixHtmlContent(responseBody, targetPath, isAjaxRequest);
+} else {
+    console.log(`🔧 Skipping URL fixing for ${contentType}`);
+}
         
         if (message.type === 'http-response' && message.id === requestId) {
             clearTimeout(timeout);
@@ -546,8 +572,7 @@ console.log('   Is comment edit:', isCommentEdit);
                     }
                 });
             }
-            let responseBody = message.body || '';
-            const responseHeaders = message.headers || {};
+
             
             // Функция для получения content type
             function getContentType(headers) {
