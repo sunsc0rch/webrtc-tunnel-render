@@ -568,7 +568,7 @@ function shouldFixContent(contentType, isAjaxRequest) {
     for (const imageType of imageTypes) {
         if (contentType.includes(imageType)) {
             console.log(`🖼️ Image detected: ${contentType}, skipping HTML fix`);
-            return false; // Изображения не обрабатываем fixHtmlContent
+            return true; 
         }
     }
     
