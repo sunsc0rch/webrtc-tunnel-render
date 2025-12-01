@@ -489,7 +489,203 @@ console.log('   Is comment edit:', isCommentEdit);
     res.status(504).send('Request timeout');
   }, 30000);
 
- const responseHandler = (data) => {
+
+const responseHandler = (data) => {
+    try {
+        const message = JSON.parse(data);
+        
+        if (message.type === 'http-response' && message.id === requestId) {
+            clearTimeout(timeout);
+            laptopWs.removeListener('message', responseHandler);
+            
+            console.log(`✅ Response ${requestId}: ${message.status}`);
+            
+            // Передаем headers
+            if (message.headers) {
+                const responseAuthTokens = extractAuthTokens(message.headers);
+                if (Object.keys(responseAuthTokens).length > 0) {
+                    console.log('🔐 New auth tokens in response:');
+                    logAuthSecurity(responseAuthTokens);
+                }
+            
+                Object.entries(message.headers).forEach(([key, value]) => {
+                    if (key.toLowerCase() !== 'content-length') {
+                        if (key.toLowerCase() === 'set-cookie') {
+                            // УНИВЕРСАЛЬНАЯ ОБРАБОТКА COOKIES
+                            const fixedCookies = fixCookiesForProxy(value, req);
+                            res.setHeader(key, fixedCookies);
+                            
+                            // Логируем установленные cookies
+                            if (fixedCookies) {
+                                const cookieArray = Array.isArray(fixedCookies) ? fixedCookies : [fixedCookies];
+                                cookieArray.forEach(cookie => {
+                                    const cookieName = cookie.split('=')[0];
+                                    console.log(`🍪 Setting cookie: ${cookieName}`);
+                                });
+                            }
+                        } else {
+                            res.setHeader(key, value);
+                        }
+                    }
+                });
+            }
+            
+            // Также обрабатываем cookies из message.cookies (если есть)
+            if (message.cookies && message.cookies.length > 0) {
+                message.cookies.forEach(cookie => {
+                    const cookieString = `${cookie.name}=${cookie.value}; Path=/; Domain=${req.headers.host.split(':')[0]}; SameSite=Lax`;
+                    
+                    const existingSetCookie = res.getHeader('set-cookie');
+                    if (existingSetCookie) {
+                        if (Array.isArray(existingSetCookie)) {
+                            res.setHeader('set-cookie', [...existingSetCookie, cookieString]);
+                        } else {
+                            res.setHeader('set-cookie', [existingSetCookie, cookieString]);
+                        }
+                    } else {
+                        res.setHeader('set-cookie', cookieString);
+                    }
+                });
+            }
+            
+            let responseBody = message.body || '';
+            const responseHeaders = message.headers || {};
+            
+            // Функция для получения content type
+            function getContentType(headers) {
+                const contentType = headers['content-type'] || headers['Content-Type'] || '';
+                return contentType.toLowerCase();
+            }
+            
+            const contentType = getContentType(responseHeaders);
+            
+            console.log(`📄 Processing response with Content-Type: ${contentType}`);
+            
+            // УЛУЧШЕННАЯ функция для определения необходимости обработки контента
+            function shouldFixContent(contentType, isAjaxRequest) {
+                contentType = contentType.toLowerCase();
+                
+                // 1. НИКОГДА не обрабатываем JSON, XML, бинарные данные
+                const skipContentTypes = [
+                    'application/json',
+                    'application/xml',
+                    'text/xml',
+                    'application/octet-stream',
+                    'application/pdf',
+                    'application/zip',
+                    'application/gzip',
+                    'image/svg+xml' // SVG как XML
+                ];
+                
+                for (const skipType of skipContentTypes) {
+                    if (contentType.includes(skipType)) {
+                        console.log(`⏭️ Skipping ${contentType} (blacklisted)`);
+                        return false;
+                    }
+                }
+                
+                // 2. Всегда пропускаем AJAX запросы (кроме HTML/CSS которые могут приходить через AJAX)
+                if (isAjaxRequest) {
+                    // Но некоторые AJAX запросы могут возвращать HTML (например, пагинация)
+                    if (contentType.includes('text/html') || contentType.includes('text/css')) {
+                        console.log(`🔧 AJAX but HTML/CSS, fixing ${contentType}`);
+                        return true;
+                    }
+                    console.log(`⏭️ Skipping AJAX ${contentType}`);
+                    return false;
+                }
+                
+                // 3. Обрабатываем текст/HTML контент
+                const textContentTypes = [
+                    'text/html',
+                    'text/css',
+                    'text/javascript',
+                    'application/javascript',
+                    'application/x-javascript',
+                    'text/plain'
+                ];
+                
+                for (const textType of textContentTypes) {
+                    if (contentType.includes(textType)) {
+                        console.log(`🔧 Fixing ${contentType} (text content)`);
+                        return true;
+                    }
+                }
+                
+                // 4. Проверяем изображения (только для base64 декодирования, не для fixHtmlContent)
+                const imageTypes = [
+                    'image/jpeg',
+                    'image/jpg',
+                    'image/png',
+                    'image/gif',
+                    'image/webp',
+                    'image/bmp',
+                    'image/tiff',
+                    'image/svg+xml'
+                ];
+                
+                for (const imageType of imageTypes) {
+                    if (contentType.includes(imageType)) {
+                        console.log(`🖼️ Image detected: ${contentType}, skipping HTML fix`);
+                        return false; 
+                    }
+                }
+                
+                // 5. Проверяем шрифты
+                const fontTypes = [
+                    'font/woff',
+                    'font/woff2',
+                    'font/ttf',
+                    'font/otf',
+                    'application/font-woff',
+                    'application/font-woff2'
+                ];
+                
+                for (const fontType of fontTypes) {
+                    if (contentType.includes(fontType)) {
+                        console.log(`🔤 Font detected: ${contentType}, skipping HTML fix`);
+                        return false;
+                    }
+                }
+                
+                // 6. По умолчанию пропускаем (безопаснее)
+                console.log(`⏭️ Default skip for ${contentType}`);
+                return false;
+            }
+            
+            // Определяем, нужно ли обрабатывать контент
+            const shouldFix = shouldFixContent(contentType, isAjaxRequest);
+
+            if (shouldFix) {
+                console.log(`🔧 Running fixHtmlContent for ${contentType}`);
+                responseBody = fixHtmlContent(responseBody, targetPath, isAjaxRequest);
+            } else if (contentType.includes('image/') || 
+                       contentType.includes('font/') ||
+                       contentType.includes('application/octet-stream')) {
+                
+                console.log(`🔧 Handling binary content: ${contentType}`);
+                
+                // Обработка бинарных данных (base64 декодирование)
+                if (typeof responseBody === 'string' && isBase64(responseBody)) {
+                    try {
+                        const buffer = Buffer.from(responseBody, 'base64');
+                        responseBody = buffer;
+                        console.log(`🖼️ Decoded base64 to buffer, length: ${buffer.length}`);
+                    } catch (error) {
+                        console.error('❌ Error decoding base64:', error);
+                    }
+                }
+            } else {
+                console.log(`🔧 Skipping content processing for ${contentType}`);
+            }
+            
+            res.status(message.status || 200).send(responseBody);
+        }
+    } catch (error) {
+        console.error('Error parsing response:', error);
+    }
+}; 
+    const responseHandler = (data) => {
     try {
         const message = JSON.parse(data);
         let responseBody = message.body || '';
