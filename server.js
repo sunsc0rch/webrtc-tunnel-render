@@ -494,7 +494,8 @@ console.log('   Is comment edit:', isCommentEdit);
         const message = JSON.parse(data);
         let responseBody = message.body || '';
         const responseHeaders = message.headers || {};
-        
+        const contentType = getContentType(responseHeaders);
+
 // Проверяем, нужно ли обрабатывать этот контент
 function shouldFixContent(contentType, isAjaxRequest) {
     // Никогда не обрабатываем JSON
@@ -580,7 +581,6 @@ function shouldFixContent(contentType, isAjaxRequest) {
                 return contentType.toLowerCase();
             }
             
-            const contentType = getContentType(responseHeaders);
             
             console.log(`📄 Processing response with Content-Type: ${contentType}`);
             
