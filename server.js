@@ -590,8 +590,7 @@ function shouldFixContent(contentType, isAjaxRequest) {
     }
     
     // 6. По умолчанию пропускаем (безопаснее)
-    console.log(`⏭️ Default skip for ${contentType}`);
-    return false;
+    return true;
 }
 
 // Обновленная функция получения content type
