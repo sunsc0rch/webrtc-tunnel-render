@@ -600,9 +600,6 @@ function getContentType(headers) {
     return contentType.toLowerCase();
 }
 
-// Обновленная обработка ответа в основном прокси-маршруте
-const contentType = getContentType(responseHeaders);
-console.log(`📄 Processing response with Content-Type: ${contentType}`);
 
 // Определяем, нужно ли обрабатывать контент
 const shouldFix = shouldFixContent(contentType, isAjaxRequest);
