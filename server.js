@@ -81,7 +81,12 @@ app.all('*', (req, res, next) => {
   if (isExcluded) {
     return next(); // Пропускаем системные маршруты
   }
-
+  // Для AJAX запросов НЕ делаем редирект через /proxy/
+  // Они уже должны приходить на /proxy/* напрямую
+  if (req.headers['x-requested-with'] === 'XMLHttpRequest') {
+    console.log('🔍 AJAX request, skipping universal redirect');
+    return next(); // Пусть обрабатывается дальше
+  }
   // Для всех остальных маршрутов - редирект через прокси
   const queryString = new URLSearchParams(req.query).toString();
   const proxyPath = `/proxy${req.path}${queryString ? '?' + queryString : ''}`;
