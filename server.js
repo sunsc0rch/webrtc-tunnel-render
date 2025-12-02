@@ -165,7 +165,50 @@ function fixHtmlContent(html, currentPath = '', isAjaxRequest = false) {
     /(pushState|replaceState)\([^,]+,\s*[^,]+,\s*["'](\/(?!\/))([^"']*)["']/g,
     '$1(null, "", "/proxy/$3"'
   );
-  
+    
+  // Обрабатываем data-атрибуты
+  fixedHtml = fixedHtml.replace(
+    /\b(data-[a-zA-Z0-9\-_]+)\s*=\s*["']([^"']*)["']/gi,
+    function(match, attrName, value) {
+        // Пропускаем если значение слишком короткое (скорее всего это ID)
+        if (value.length < 3) return match;
+        
+        // Пропускаем если это просто число
+        if (/^\d+$/.test(value)) return match;
+        
+        // Пропускаем если это просто текст без слэшей
+        if (!value.includes('/')) return match;
+        
+        // Проверяем начинается ли с /
+        if (value.startsWith('/')) {
+            // Разбиваем путь на части
+            const parts = value.split('/').filter(p => p.length > 0);
+            
+            // Это похоже на путь если:
+            // 1. Есть хотя бы 2 части: /part1/part2
+            // 2. Первая часть содержит буквы: /catalog/...
+            // 3. Или есть расширение файла
+            const isPathLike = 
+                parts.length >= 2 ||
+                (parts[0] && /[a-zA-Z]/.test(parts[0])) ||
+                value.includes('.') && value.match(/\.[a-zA-Z]{2,4}$/);
+            
+            if (isPathLike) {
+                // Дополнительная проверка - не является ли это просто "/91" или подобным
+                if (parts.length === 1 && /^\d+$/.test(parts[0])) {
+                    // Это просто число типа "/91" - не URL
+                    return match;
+                }
+                
+                console.log(`🔧 Adding /proxy/ to data-${attrName}: ${value}`);
+                return `${attrName}="/proxy${value}"`;
+            }
+        }
+        
+        return match;
+    }
+);
+    
   // Добавляем base tag если его нет
   if (!fixedHtml.includes('<base') && fixedHtml.includes('</head>')) {
     fixedHtml = fixedHtml.replace(
