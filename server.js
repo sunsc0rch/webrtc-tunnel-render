@@ -184,23 +184,16 @@ function fixHtmlContent(html, currentPath = '', isAjaxRequest = false) {
             // Разбиваем путь на части
             const parts = value.split('/').filter(p => p.length > 0);
             
-            // Это похоже на путь если:
-            // 1. Есть хотя бы 2 части: /part1/part2
-            // 2. Первая часть содержит буквы: /catalog/...
-            // 3. Или есть расширение файла
             const isPathLike = 
                 parts.length >= 2 ||
                 (parts[0] && /[a-zA-Z]/.test(parts[0])) ||
                 value.includes('.') && value.match(/\.[a-zA-Z]{2,4}$/);
             
             if (isPathLike) {
-                // Дополнительная проверка - не является ли это просто "/91" или подобным
                 if (parts.length === 1 && /^\d+$/.test(parts[0])) {
-                    // Это просто число типа "/91" - не URL
                     return match;
                 }
                 
-                console.log(`🔧 Adding /proxy/ to data-${attrName}: ${value}`);
                 return `${attrName}="/proxy${value}"`;
             }
         }
@@ -473,12 +466,6 @@ function fixSingleCookie(cookieHeader, req) {
   const [laptopWs] = laptops.entries().next().value;
   const requestId = generateId();
   
-  console.log(`🔄 Forwarding to laptop: ${requestId}`);
-      // ПРОВЕРКА СОСТОЯНИЯ WEBSOCKET
-    console.log('🔌 WebSocket connection check:');
-    console.log('   Ready state:', laptopWs.readyState); // 1 = OPEN, 3 = CLOSED
-    console.log('   Connection alive:', laptopWs.readyState === 1);
-
     if (laptopWs.readyState !== 1) {
         console.error('❌ WebSocket not connected, readyState:', laptopWs.readyState);
         laptops.delete(laptopWs);
@@ -516,10 +503,9 @@ const isCommentEdit = targetPath.includes('/comment/') && targetPath.includes('/
 
 
 console.log('🔍 FINAL METHOD DECISION:');
-console.log('   Original:', req.method);
 console.log('   Preserved:', preservedMethod);
 console.log('   Is AJAX:', isAjaxRequest);
-console.log('   Is comment edit:', isCommentEdit);
+
 
   // Удаляем проблемные headers
   delete requestData.headers.host;
@@ -669,7 +655,6 @@ const responseHandler = (data) => {
                 
                 for (const imageType of imageTypes) {
                     if (contentType.includes(imageType)) {
-                        console.log(`🖼️ Image detected: ${contentType}, skipping HTML fix`);
                         return false; 
                     }
                 }
@@ -686,13 +671,11 @@ const responseHandler = (data) => {
                 
                 for (const fontType of fontTypes) {
                     if (contentType.includes(fontType)) {
-                        console.log(`🔤 Font detected: ${contentType}, skipping HTML fix`);
                         return false;
                     }
                 }
                 
                 // 6. По умолчанию пропускаем (безопаснее)
-                console.log(`⏭️ Default skip for ${contentType}`);
                 return false;
             }
             
@@ -757,7 +740,6 @@ const handleRequest = (body = null) => {
                 // Если тело уже строка - используем как есть
                 requestData.body = req.body;
                 requestData.hasBody = true;
-                console.log('✅ Using string body as-is');
             } else {
                 // Пробуем получить raw body как строку
                 requestData.body = req.body || '';
@@ -773,16 +755,11 @@ const handleRequest = (body = null) => {
             // Для других типов контента
             requestData.body = req.body;
             requestData.hasBody = true;
-            console.log('📦 Using body as:', typeof req.body);
         } else {
             requestData.hasBody = false;
             console.log('📦 No body data');
         }
     }
-
-    console.log('🔒 Final method to laptop:', requestData.method);
-    console.log('📦 Has body data:', requestData.hasBody);
-    console.log('📦 Body type:', typeof requestData.body);
     
     try {
         laptopWs.send(JSON.stringify(requestData));
@@ -801,8 +778,6 @@ if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/fo
     const isAjax = req.headers['x-requested-with'] === 'XMLHttpRequest';
     // ВАЖНО: Сохраняем оригинальный метод для AJAX запросов
     const originalMethod = req.method;
-    console.log('   Stored method:', originalMethod);
-    console.log('   Stored isAjax:', isAjax);
     
     const chunks = [];
     let totalSize = 0;
@@ -874,24 +849,7 @@ wss.on('connection', (ws, req) => {
 ws.on('message', (data) => {
     try {
         const message = JSON.parse(data);
-    
-        
-        if (message.type === 'http-request') {
-            console.log('🔍 HTTP REQUEST ANALYSIS:');
-            console.log('   Method:', message.method);
-            console.log('   Path:', message.path);
-            console.log('   Has body:', !!message.body);
-            console.log('   Body type:', typeof message.body);
-            console.log('   Body length:', message.body ? message.body.length : 0);
-            console.log('   Body keys:', message.body && typeof message.body === 'object' ? Object.keys(message.body) : 'N/A');
-            console.log('   Headers:', message.headers);
-            
-            // Логируем первые 200 символов тела
-            if (message.body && typeof message.body === 'string') {
-                console.log('   Body preview:', message.body.substring(0, 200));
-            }
-        }
-        
+           
         switch (message.type) {
             case 'register-laptop':
                 laptops.set(ws, {
