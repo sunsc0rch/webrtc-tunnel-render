@@ -234,16 +234,11 @@ ws.on('message', async (data) => {
             } else {
                 console.log('⚠️ No query parameters in message');
             }
-            
-            console.log(`🎯 Final URL: ${fullUrl}`);
-            console.log(`🔒 Final method: ${message.method}`);
-            
             // ПОДГОТАВЛИВАЕМ HEADERS
             const headers = {
                 ...message.headers,
                 'host': 'localhost:8100',
                 'connection': 'close',
-                // Добавляем важные headers для Django
                 'x-forwarded-proto': 'https',
                 'x-forwarded-host': 'webrtc-tunnel-render.onrender.com',
                 'x-real-ip': '127.0.0.1'
@@ -272,16 +267,7 @@ ws.on('message', async (data) => {
                 console.log(`🍪 Added incoming cookies: ${message.headers.cookie}`);
             }
 
-            // СПЕЦИАЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ФОРМ РЕДАКТИРОВАНИЯ ПРОФИЛЯ
-            if (message.method === 'POST' && message.path.includes('/edit/')) {
-                console.log('👤 FORM SUBMISSION DETECTED:');
-                console.log('📋 Method:', message.method);
-                console.log('📋 Path:', message.path);
-                console.log('📋 Has body:', !!message.body);
-                console.log('🍪 Cookies being sent:', headers['cookie']);
-            }
-            
-            const fetchOptions = {
+                const fetchOptions = {
                 method: message.method,
                 headers: headers,
                 redirect: 'manual'
@@ -289,38 +275,37 @@ ws.on('message', async (data) => {
 
             // ОБРАБОТКА ТЕЛА ЗАПРОСА:
             if (message.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(message.method)) {
-                console.log(`📦 Processing body for ${message.method} request`);
-                
+
                 if (message.isBase64Multipart) {
                     // Для base64 encoded multipart данных
                     console.log('📎 Base64 multipart form data detected');
-                    
+
                     // Декодируем из base64 обратно в buffer
                     const buffer = Buffer.from(message.body, 'base64');
                     console.log('📦 Decoded buffer length:', buffer.length);
-                    
+
                     fetchOptions.body = buffer;
-                    
+
                     // Восстанавливаем оригинальный content-type
                     if (message.originalContentType) {
                         headers['content-type'] = message.originalContentType;
                     } else if (message.headers && message.headers['content-type']) {
                         headers['content-type'] = message.headers['content-type'];
                     }
-                    
+
                 } else if (message.isRawMultipart) {
                     // Для raw multipart данных
                     console.log('📎 Raw multipart form data detected');
                     fetchOptions.body = message.body;
-                    
+
                     if (message.headers && message.headers['content-type']) {
                         headers['content-type'] = message.headers['content-type'];
                     }
                     console.log('📦 Raw multipart body length:', message.body.length);
-                    
+
                 } else if (typeof message.body === 'string') {
                     fetchOptions.body = message.body;
-                    
+
                     // Автоматически определяем Content-Type
                     if (message.body.includes('csrfmiddlewaretoken') ||
                         message.body.includes('username') ||
@@ -328,7 +313,7 @@ ws.on('message', async (data) => {
                         message.body.includes('application/x-www-form-urlencoded')) {
                         headers['content-type'] = 'application/x-www-form-urlencoded';
                     }
-                    
+
                 } else if (typeof message.body === 'object') {
                     // Для обычных объектов
                     fetchOptions.body = JSON.stringify(message.body);
@@ -338,13 +323,6 @@ ws.on('message', async (data) => {
                 console.log(`📦 Final body type: ${typeof fetchOptions.body}`);
             } else {
                 console.log('📦 No body in request');
-            }
-
-            // ДИАГНОСТИКА АУТЕНТИФИКАЦИИ
-            console.log('🔐 Request Auth Analysis:');
-            if (message.authInfo) {
-                console.log('   - Auth methods:', message.authInfo.methods);
-                console.log('   - Has auth:', message.authInfo.hasAuth);
             }
 
             try {
@@ -360,25 +338,25 @@ ws.on('message', async (data) => {
                     contentType.includes('application/octet-stream') ||
                     contentType.includes('font/') ||
                     contentType.includes('binary')) {
-                    
+
                     const buffer = await response.buffer();
                     body = buffer.toString('base64');
-                    
+
                 } else if (contentType.includes('text/html') || 
                            contentType.includes('text/plain') ||
                            contentType.includes('text/css') ||
                            contentType.includes('application/json')) {
-                    
+
                     if (contentType.includes('application/json')) {
                         body = await response.json();
                     } else {
                         body = await response.text();
                     }
-                    
+
                 } else {
                     body = await response.text();
                 }
-                
+
                 // СОБИРАЕМ ВСЕ HEADERS ОТВЕТА
                 const responseHeaders = {};
                 response.headers.forEach((value, key) => {
@@ -404,7 +382,7 @@ ws.on('message', async (data) => {
 
                 console.log(`✅ Sending response ${message.id} with status ${response.status}`);
                 ws.send(JSON.stringify(responseMessage));
-        
+
             } catch (error) {
                 console.error('❌ Fetch error:', error);
                 ws.send(JSON.stringify({
@@ -472,8 +450,6 @@ ws.on('message', async (data) => {
         }
 
         cookieJar.clear();
-        console.log('🍪 Cookie jar cleared');
-        console.log('✅ Cleanup completed');
     }
 
     // Обработка graceful shutdown
