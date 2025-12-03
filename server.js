@@ -69,7 +69,7 @@ app.get('/health', (req, res) => {
 
 // Универсальный перехватчик для всех маршрутов, кроме системных
 app.all('*', (req, res, next) => {
-  const excludedPaths = ['/', '/status', '/health', '/proxy', '/proxy/*', '/test-query'];
+  const excludedPaths = ['/', '/status', '/health', '/proxy', '/proxy/*'];
   const isExcluded = excludedPaths.some(path => {
     if (path.endsWith('/*')) {
       const basePath = path.slice(0, -2);
@@ -95,25 +95,10 @@ app.all('*', (req, res, next) => {
   res.redirect(proxyPath);
 });
 
-// ТЕСТОВЫЙ МАРШРУТ ДЛЯ ДИАГНОСТИКИ
-app.get('/test-query', (req, res) => {
-  console.log('=== TEST QUERY DEBUG ===');
-  console.log('Full URL:', req.originalUrl);
-  console.log('Query params:', req.query);
-  console.log('Query keys:', Object.keys(req.query));
-  res.json({
-    originalUrl: req.originalUrl,
-    query: req.query,
-    queryKeys: Object.keys(req.query),
-    success: true
-  });
-});
-
 // УЛУЧШЕННАЯ функция для фиксации HTML контента
 function fixHtmlContent(html, currentPath = '', isAjaxRequest = false) {
   if (!html || typeof html !== 'string') return html;
       if (isAjaxRequest) {
-        console.log('🔍 AJAX request - skipping URL fixing');
         return html;
     }
   let fixedHtml = html;
