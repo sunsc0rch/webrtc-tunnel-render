@@ -1,0 +1,92 @@
+Overview
+
+This is a sophisticated WebRTC tunnel application that allows users to expose local applications (running on their laptops) to the internet via a proxy server. The system consists of three main components:
+
+    Server component - A WebSocket/HTTP proxy server that runs on a public host (like Render)
+    Laptop client - A Node.js client that connects to the server and forwards requests to a local application
+    Browser client - A web interface that connects to the server via WebSocket
+
+Architecture
+Server Component (server.js)
+
+    Technology: Node.js with Express, WebSocket (ws), and CORS
+    Function: Acts as a proxy server that routes HTTP requests from browsers to the laptop client
+    Key Features:
+        WebSocket server for communication with laptop clients
+        HTTP proxy that intercepts all routes and redirects to /proxy/*
+        HTML content rewriting to fix relative URLs and make them work through the proxy
+        Authentication token detection and handling (JWT, API keys, session cookies)
+        Cookie management and domain fixing for proxy compatibility
+        Multipart form data handling with base64 encoding for file transfers
+
+Laptop Client (for_laptop/laptop-client.js)
+
+    Technology: Node.js with WebSocket and node-fetch
+    Function: Runs on the user's laptop, connects to the server, and forwards requests to a local application
+    Key Features:
+        Maintains persistent WebSocket connection to the server
+        Cookie jar for session management
+        Heartbeat mechanism for connection health
+        Automatic reconnection logic
+        Request/response proxying between server and local application
+        Multipart form data handling (encoding/decoding)
+
+Browser Client
+
+    Components: 
+        public/index.html - Main interface with aggressive URL rewriting
+        public/client.js - WebSocket client for browser-server communication
+        public/status.html - Status monitoring page
+
+Key Features
+1. Aggressive URL Rewriting
+
+    All relative URLs are rewritten to go through the /proxy/ endpoint
+    JavaScript intercepts fetch(), XMLHttpRequest, and DOM events
+    CSS URL() references are fixed
+    Form actions and links are rewritten
+
+2. Authentication Handling
+
+    Comprehensive detection of various auth tokens (JWT, API keys, session cookies)
+    Token storage and forwarding between requests
+    CSRF token handling for form submissions
+
+3. Session Management
+
+    Cookie jar implementation in laptop client
+    Cookie domain/secure attribute fixing
+    Session persistence across requests
+
+4. Form Handling
+
+    Special handling for multipart/form-data with file uploads
+    CSRF token injection in forms
+    Form submission interception and proxying
+
+5. Dynamic Content Loading
+
+    AJAX request interception
+    Real-time DOM modification with MutationObserver
+    Bootstrap component re-initialization after content loading
+
+Deployment
+
+    Platform: Render (with render.yaml configuration)
+    Runtime: Node.js
+    Environment: Production-ready with health checks and status monitoring
+
+Security Considerations
+
+    All requests are proxied, preventing direct access to local applications
+    Authentication token handling with logging (though should be improved to avoid logging sensitive data)
+    Cookie security attribute management
+
+Use Cases
+
+    Sharing local development servers with others
+    Testing web applications from different networks
+    Bypassing firewall restrictions for development
+    Creating temporary public access to local services
+
+This is a well-designed solution for creating secure tunnels between local applications and the internet, using WebSockets as the backbone for bidirectional communication.
