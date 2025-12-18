@@ -42,3 +42,7 @@ Change it in laptop-client.js
 run it 
 
 RENDER_SERVER=wss://your-webrtc-tunnel-app.onrender.com node laptop-client.js
+
+## Documentation
+
+For detailed documentation about how this WebRTC tunnel application works, please see the [docs](./docs).
